@@ -1,0 +1,6 @@
+#!/bin/sh
+[ -f /etc/config/pbr ] || exit 0
+uci -q get pbr.config.enabled >/dev/null || exit 0
+uci set pbr.config.enabled='0'
+uci commit pbr
+exit 0
