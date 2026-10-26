@@ -204,19 +204,18 @@ XG2010G 与 XR1710G 同属 Airoha AN7581 平台，但硬件布局和软件包集
 
 | 工作流 | 触发方式 | 功能 |
 |--------|---------|------|
-| [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 (workflow_dispatch) | 构建固件并发布 Release |
+| [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 (workflow_dispatch)；推送 `v*` tag | 构建固件；tag 推送用该 tag 发布 Release |
 | [sync-upstream.yml](.github/workflows/sync-upstream.yml) | 每 3 天定时 + 手动 | 同步 ImmortalWrt 上游 |
 
-**构建配置**：仓库根目录的 [1710.config](1710.config)、[2010.config](2010.config) 和 [2010-2g.config](2010-2g.config) 分别对应 XR1710G、XG2010G（1 GiB）与 XG2010G（2 GiB）。`1710.config` 使用 multi-profile 一次构建两个 XR1710G 固件：原版 U-Boot 分区和 OpenWrt U-Boot UBI 布局；Action 默认使用 `1710.config`，也可以在手动触发时选择 `2010.config` 或 `2010-2g.config`。构建流程会执行 `cp <config> .config && bash scripts/set-build-version.sh .config && make defconfig`。
+**构建配置**：仓库根目录的 [1710.config](1710.config)、[2010.config](2010.config) 和 [2010-2g.config](2010-2g.config) 分别对应 XR1710G、XG2010G（1 GiB）与 XG2010G（2 GiB）。`1710.config` 使用 multi-profile 一次构建两个 XR1710G 固件：原版 U-Boot 分区和 OpenWrt U-Boot UBI 布局；手动触发默认使用 `1710.config`，也可以选择 `2010.config` 或 `2010-2g.config`。推送 `v*` tag（例如 `git tag v20261026-5b3d606 && git push origin v20261026-5b3d606`）会构建并发布到该 tag：tag 名含 `2g` 用 `2010-2g.config`，含 `1710` 用 `1710.config`，否则用 `2010.config`。构建流程会执行 `cp <config> .config && bash scripts/set-build-version.sh .config && make defconfig`。
 构建时会通过 [scripts/set-build-version.sh](scripts/set-build-version.sh) 写入 LuCI 可见的构建日期和 commit hash。
 文件名只保留 `日期-本机commit`（较短），完整的 `日期-本机commit-上游commit` 写在 `CONFIG_VERSION_CODE`，
 可在 LuCI 状态页与 `/etc/openwrt_release` 中查看；需要把 revision 也拼进文件名时设
 `VERSION_CODE_FILENAMES=y bash scripts/set-build-version.sh .config`。
 
 **Release 格式**：
-- Tag：`YYYYMMDD-<short-hash>`
-- 名称：`YYYYMMDD - Gemtek <XR1710G|XG2010G> Build (<short-hash>)`
-- 选项：`release` / `prerelease` / `none`
+- 手动发布 Tag：`YYYYMMDD-<short-hash>`（`release` / `prerelease` / `none`）
+- Tag 推送：沿用已推送的 `v*` tag，不另建 tag。名称仍为 `YYYYMMDD - Gemtek <XR1710G|XG2010G|XG2010G-2G> Build (<short-hash>)`。tag 名含 `rc` / `beta` / `pre` 时标为 prerelease，否则为正式 Release。
 
 ## 下载
 
