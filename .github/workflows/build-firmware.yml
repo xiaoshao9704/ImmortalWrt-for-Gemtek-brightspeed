@@ -1,6 +1,19 @@
 name: Build Firmware
 
+# Pushing a tag that starts with v (for example v20261026-5b3d606) builds
+# firmware and publishes a GitHub Release on that same tag. No second tag is
+# created. workflow_dispatch stays available for manual builds.
+#
+# Tag config seed (case-insensitive, first match): *2g* -> 2010-2g.config,
+# *1710* -> 1710.config, otherwise 2010.config (XG2010G, this fork's default).
+# Tags containing rc, beta, or pre are prereleases; other v* tags are full
+# releases. Manual dispatch still uses its inputs. A dispatch release still
+# creates a YYYYMMDD-<commit> tag, which does not match v* and does not
+# retrigger this workflow.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       config_seed:
@@ -39,8 +52,77 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve build inputs
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_CONFIG_SEED: ${{ github.event.inputs.config_seed }}
+          INPUT_RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+        run: |
+          set -euo pipefail
+
+          event_name="${EVENT_NAME}"
+          ref_name="${REF_NAME}"
+          input_config_seed="${INPUT_CONFIG_SEED:-}"
+          input_release_type="${INPUT_RELEASE_TYPE:-}"
+          publish_release=false
+          prerelease=false
+
+          if [ "$event_name" = "workflow_dispatch" ]; then
+            config_seed="$input_config_seed"
+            case "$input_release_type" in
+              release)
+                publish_release=true
+                prerelease=false
+                ;;
+              prerelease)
+                publish_release=true
+                prerelease=true
+                ;;
+              none|'')
+                publish_release=false
+                prerelease=false
+                ;;
+              *)
+                echo "Unsupported release_type: $input_release_type" >&2
+                exit 1
+                ;;
+            esac
+          else
+            # Tag push. Case-insensitive first match on the tag name.
+            shopt -s nocasematch
+            if [[ "$ref_name" == *2g* ]]; then
+              config_seed="2010-2g.config"
+            elif [[ "$ref_name" == *1710* ]]; then
+              config_seed="1710.config"
+            else
+              config_seed="2010.config"
+            fi
+            publish_release=true
+            if [[ "$ref_name" == *rc* || "$ref_name" == *beta* || "$ref_name" == *pre* ]]; then
+              prerelease=true
+            fi
+          fi
+
+          case "$config_seed" in
+            1710.config|2010.config|2010-2g.config) ;;
+            *)
+              echo "Unsupported config seed: ${config_seed:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "config_seed=$config_seed" >> "$GITHUB_OUTPUT"
+          echo "publish_release=$publish_release" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Resolved config_seed=$config_seed publish_release=$publish_release prerelease=$prerelease event=$event_name ref=$ref_name"
+
       - name: Generate build version
         id: version
+        env:
+          CONFIG_SEED: ${{ steps.resolve.outputs.config_seed }}
         run: |
           git remote add upstream https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
           git remote set-url upstream https://github.com/immortalwrt/immortalwrt.git
@@ -61,11 +143,11 @@ jobs:
           echo "upstream_commit=$upstream_commit" >> $GITHUB_OUTPUT
           echo "version_number=$version_number" >> $GITHUB_OUTPUT
           echo "version_code=$version_code" >> $GITHUB_OUTPUT
-          case '${{ inputs.config_seed }}' in
+          case "$CONFIG_SEED" in
             1710.config) device_model=XR1710G ;;
             2010.config) device_model=XG2010G ;;
             2010-2g.config) device_model=XG2010G-2G ;;
-            *) echo "Unsupported config seed: ${{ inputs.config_seed }}" >&2; exit 1 ;;
+            *) echo "Unsupported config seed: $CONFIG_SEED" >&2; exit 1 ;;
           esac
           echo "device_model=$device_model" >> $GITHUB_OUTPUT
           echo "Build version: ImmortalWrt-for-Gemtek-brightspeed $device_model $version_number"
@@ -85,8 +167,10 @@ jobs:
         run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
 
       - name: Configure
+        env:
+          CONFIG_SEED: ${{ steps.resolve.outputs.config_seed }}
         run: |
-          cp '${{ inputs.config_seed }}' .config
+          cp "$CONFIG_SEED" .config
           BUILD_DATE='${{ steps.version.outputs.date }}' \
           BUILD_ID='${{ steps.version.outputs.build_id }}' \
           REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
@@ -156,7 +240,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: gemtek-${{ inputs.config_seed }}-firmware
+          name: gemtek-${{ steps.resolve.outputs.config_seed }}-firmware
           path: |
             build.log
             build-verbose.log
@@ -170,12 +254,20 @@ jobs:
         if: always()
 
       - name: Build release body
-        if: github.event.inputs.release_type != 'none'
+        if: success() && steps.resolve.outputs.publish_release == 'true'
         id: release_body
         env:
           RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          CONFIG_SEED: ${{ steps.resolve.outputs.config_seed }}
         run: |
           {
+            if [ "$EVENT_NAME" = "push" ]; then
+              printf 'Tag: `%s`\n' "$REF_NAME"
+              printf 'Config: `%s`\n' "$CONFIG_SEED"
+              echo ""
+            fi
             printf '%s\n' "$RELEASE_NOTES"
             echo ""
             echo "---"
@@ -191,14 +283,19 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Create Release
-        if: github.event.inputs.release_type != 'none'
+        # Tag pushes attach the release to github.ref_name (the tag that was
+        # pushed). Dispatch releases still create YYYYMMDD-<commit>.
+        # target_commitish is the built SHA; GitHub ignores it when the tag
+        # already exists, so a tag push does not move or recreate that tag.
+        if: success() && steps.resolve.outputs.publish_release == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ format('{0}-{1}', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || format('{0}-{1}', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
+          target_commitish: ${{ github.sha }}
           name: ${{ format('{0} - Gemtek {1} Build ({2})', steps.version.outputs.date, steps.version.outputs.device_model, steps.version.outputs.repo_commit) }}
           body: ${{ steps.release_body.outputs.body }}
           draft: false
-          prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          prerelease: ${{ steps.resolve.outputs.prerelease == 'true' }}
           files: |
             bin/targets/airoha/an7581/*.itb
             bin/targets/airoha/an7581/config.buildinfo
