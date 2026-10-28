@@ -3,13 +3,17 @@
 ## 基线与结论
 
 复核 PR：<https://github.com/xiaoshao9704/ImmortalWrt-for-Gemtek-brightspeed/pull/3>。
-本次查询 PR 仍为 Open，已有 **5 次提交**，HEAD 为
-`d2736be1e45dd0f4f74b5b9b31171ef6a72af963`，不是问题描述中的两提交版本
-`f9fba27aa25da7c057b53e8f5e90100a59e89da4`。
+**修复状态**：v2 加载状态修复及 27 项回归测试已提交到 PR 分支，见
+[`62929827`](https://github.com/xiaoshao9704/ImmortalWrt-for-Gemtek-brightspeed/commit/6292982743f54d40c482d79412ca7da9e08dd85a)。
+这里的“已提交到 PR”不表示 PR 已合并到目标分支。
+
+**历史审查基线**：首次调查时 PR 为 Open、包含 5 次提交，HEAD 为
+`d2736be1e45dd0f4f74b5b9b31171ef6a72af963`；问题描述最初引用的是两提交版本
+`f9fba27aa25da7c057b53e8f5e90100a59e89da4`。以下缺陷分析和对照表中的基线结论指这两个历史版本，不是对修复后 HEAD 的描述。
 
 - `408a924c`、`11c66fe0` 已修掉旧版直接补 filter stamp 的分支，并在 reload 返回失败时清理 stamp。
 - `d2736be1` 增加 full 短路；其谓词仍执行一次磁盘文件 `nft -c`，不是完全省略校验。
-- 最新版仍有安装失败后继续标记、替换文件后旧 stamp 残留、reload 中断残留及 stamp 写失败被忽略的问题。
+- 审查基线 `d2736be1` 存在安装失败后继续标记、替换文件后旧 stamp 残留、reload 中断残留及 stamp 写失败被忽略的问题；上述问题已由 v2 修复。
 - **更底层的问题**：固定版本的 firewall4 在 nft 加载失败后执行 includes，后者成功会覆盖失败状态。因此，仅修 ONU 脚本的成功分支还不够。
 
 ## 三种状态必须分开
@@ -58,7 +62,7 @@ ACTION=includes utpl -S $MAIN
 ```
 
 虽有 `set -o pipefail`，但没有 `set -e` 或显式判断；第二条命令覆盖第一条管道状态。
-本仓库现有 firewall4 patches 未修正该位置。init 的 `reload_service()` 直接调用 `fw4 reload`，
+审查基线 `d2736be1` 的 firewall4 patches 未修正该位置。init 的 `reload_service()` 直接调用 `fw4 reload`，
 本仓库 rc.common 的 reload 路径将这个返回值向上传递。新增的 package patch 只在第一条管道后增加 `|| return 1`。
 
 测试直接运行这个固定版本的 fw4（临时路径，Bash 驱动），用假的 `utpl`/`nft` 注入
@@ -89,7 +93,7 @@ python3 tests/test_onu_bridge_nft.py --onu-source /tmp/onu-internet-apply --fw4-
 ## 验证边界
 
 - **本地模拟**：优化版 27 个测试方法，含多个子场景；补丁版全部通过。覆盖首次启动、两处旧 filter 盲标记、双向切换、连续失败、失败后重试、同模式配置变化、安装与标记 I/O 失败、中断、空 staging、空端口、禁用/路由模式、TAG/UNTAG、过滤内容与 full 优先顺序。另执行补丁应用校验和完整脚本语法检查。
-- **CI 固件构建**：本次按最新 HEAD 查询 check runs、全部触发类型的 workflow runs、commit statuses，均未返回记录；没有触发新构建。现有 build workflow 只接受 `v*` tag 或手动 dispatch，PR 本身不会自动执行该固件构建。旧提交的构建不能证明本次 HEAD 或本修复通过。
+- **CI 固件构建**：首次调查按基线 `d2736be1` 查询 check runs、全部触发类型的 workflow runs、commit statuses，均未返回记录；该结果只是历史查询快照，不代表后续 HEAD 的 CI 状态。本轮修复工作没有触发新构建。现有 build workflow 只接受 `v*` tag 或手动 dispatch，PR 本身不会自动执行该固件构建。旧提交的构建不能证明本次 HEAD 或本修复通过。
 - **真实 XG2010G**：未接触、未刷写、未运行网络命令；bridge flowtable、PPPoE/IPoE 数据面、硬件 PPE offload 均未验证。
 
 成功 stamp 表示“本脚本观察到 firewall reload 成功且保存了这份文件”，不是持续监控内核。
@@ -109,4 +113,4 @@ full→filter 时还应检查旧 flowtable 对象是否残留；此补丁保留�
 - 新增复制中途的可见性断言、mktemp/cp/mv 故障注入，以及真实 SIGKILL 测试进程后重新调用的验证。优化版共 27 个测试方法，全部通过；同一套新增断言对首版补丁能检出未原子发布的问题。
 - **R5-N2 已证伪**：`reload_sets()` 的管道是函数末尾命令，`pipefail` 的非零状态不会被后续命令覆盖。保持生产代码不变，加入四组测试：`(utpl,nft)=(0,0),(0,7),(9,0),(9,7)`，退出码依次为 `0,7,9,7`。
 - **R5-N3 为预期的全局变化**：新增 fw4 patch 作用于全机 start/reload，渲染或 nft 加载失败将跳过 includes 并返回非零；其他调用方也会观察到这个正确的失败状态。实验机仍需验证真实退出码和 includes 行为。
-- 本轮重新查询 PR HEAD，仍为 `d2736be1e45dd0f4f74b5b9b31171ef6a72af963`。未推送、未合并、未触发固件构建、未进行实机操作。
+- v2 补丁包验证完成时的远端基线为 `d2736be1e45dd0f4f74b5b9b31171ef6a72af963`；随后已通过 `62929827` 提交到 PR 分支。修复工作未合并 PR、未触发固件构建、未进行实机操作。
