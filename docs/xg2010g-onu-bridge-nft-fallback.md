@@ -25,10 +25,12 @@
 
 所以启动时先留下过滤表。`wan` ifup 之后，`/etc/hotplug.d/iface/99-internet-bridge-nft` 调用 `internet-apply reprobe`：
 
-- 只重写 nft 文件，并在规则变化或上次 firewall reload 失败时重载 firewall4。
+- 只重写 nft 文件，并在规则变化或 stamp 与磁盘不一致时重载 firewall4。
 - 不调用 netifd reload，热插拔不会打环。
-- 内核仍拒绝 flowtable 时，过滤表保持不变，也不会每次 ifup 都重载防火墙。
-- firewall reload 失败时不记下“已加载”。下一次 `wan` ifup 再试。
+- 内核仍拒绝 flowtable 时，过滤表保持不变；已成功加载且 stamp 匹配时，不会每次 ifup 都重载防火墙。
+- **只有** firewall reload（或 `reload_runtime` 里的等价成功路径）成功后才写“已加载”stamp。reload 失败会清掉 stamp，下一次 `wan` ifup 再试。磁盘上已是 filter、但 stamp 缺失或不一致时，也会走 reload，不会盲标记已加载。
+- LuCI apply 的 `write_nft_rules` 与 hotplug reprobe 共用一把 `/var/lock/internet-nft-reprobe.lock`，避免并发写 `/etc/internet.nft`。
+- reprobe 要求 bridge 且 `ports` 非空；端口为空时只 warn 并跳过，不写文件。
 
 ## 和 `fix/xg2010g-onu-bridge-rules` 的差别
 
