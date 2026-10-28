@@ -16,7 +16,7 @@ index 0000000..12b3fed
 +
 +/usr/libexec/internet-apply reprobe
 diff --git a/luci-app-onu/root/usr/libexec/internet-apply b/luci-app-onu/root/usr/libexec/internet-apply
-index ced2d03..5a31c59 100755
+index ced2d03..4c6f227 100755
 --- a/luci-app-onu/root/usr/libexec/internet-apply
 +++ b/luci-app-onu/root/usr/libexec/internet-apply
 @@ -395,44 +395,113 @@ write_offload_defaults() {
@@ -186,12 +186,12 @@ index ced2d03..5a31c59 100755
 +	chain wanup_forward {
  EOF
 -		done
-+	fi
- 
+-
 -		if [ "$IPOE" -eq 1 ]; then
 -			for port in $PORTS; do
 -				cat >>"$tmp" <<EOF
--
++	fi
+ 
 -		# IPoE operators carry native IPv4/IPv6 instead of a PPPoE session.
 -		iifname "$port" oifname "$uplink_ref" ether type { arp, ip, ip6 } \
 -			counter accept comment "ipoe-to-uplink-$port"
@@ -212,7 +212,7 @@ index ced2d03..5a31c59 100755
  	}
  
  	chain forward {
-@@ -500,15 +552,201 @@ EOF
+@@ -500,15 +552,228 @@ EOF
  	}
  }
  EOF
@@ -233,6 +233,15 @@ index ced2d03..5a31c59 100755
 +
 +stage_nft_file() {
 +	mktemp "${NFT_STAGE_DIR:-/etc}/internet.nft.XXXXXX"
++}
++
++# Render $2 (full|filter) into $1 and accept only when nft -c passes.
++# Shared by LuCI apply and wan ifup reprobe so the probe order cannot drift.
++stage_validated_rules() {
++	local tmp="$1" ruleset="$2"
++
++	render_bridge_rules "$tmp" "$ruleset"
++	nft_rules_ok "$tmp"
 +}
 +
 +write_nft_rules() {
@@ -256,26 +265,21 @@ index ced2d03..5a31c59 100755
 +		return 0
 +	fi
 +
-+	render_bridge_rules "$tmp" full
-+	if nft_rules_ok "$tmp"; then
++	if stage_validated_rules "$tmp" full; then
 +		install_nft_file "$tmp" full
 +		return 0
- 	fi
- 
--	if ! nft -c -f "$tmp" >/dev/null 2>&1; then
++	fi
++
 +	warn "Complete bridge rules (flowtable) rejected by nft -c (${NFT_LAST_NFT_ERROR}); falling back to the PPPoE/IPoE filter"
-+	render_bridge_rules "$tmp" filter
-+	if ! nft_rules_ok "$tmp"; then
- 		rm -f "$tmp"
--		fail "Generated nftables rules failed validation"
-+		fail "Generated nftables rules failed validation: $NFT_LAST_NFT_ERROR"
- 	fi
-+	warn "Installed PPPoE/IPoE bridge filter without flowtable; the next apply retries the full table"
-+	install_nft_file "$tmp" filter
++	if stage_validated_rules "$tmp" filter; then
++		warn "Installed PPPoE/IPoE bridge filter without flowtable; the next apply retries the full table"
++		install_nft_file "$tmp" filter
++		return 0
++	fi
++	rm -f "$tmp"
++	fail "Generated nftables rules failed validation: $NFT_LAST_NFT_ERROR"
 +}
- 
--	chmod 0644 "$tmp"
--	mv -f "$tmp" "$NFT_FILE"
++
 +# Shared exclusive lock for every writer of /etc/internet.nft (LuCI apply and
 +# wan ifup reprobe). Nested callers that already hold it are no-ops.
 +nft_file_lock() {
@@ -321,41 +325,70 @@ index ced2d03..5a31c59 100755
 +		grep -qx "# internet-apply bridge ruleset: $1" "$NFT_FILE"
 +}
 +
-+# Install $2 when the on-disk file is not already this ruleset, then reload
-+# firewall4. Only a successful reload stamps the ruleset as loaded; a failed
-+# reload clears the stamp so the next reprobe retries. Always returns 0:
-+# hotplug must not abort later iface scripts. Caller must hold nft_file_lock.
-+commit_probed_rules() {
-+	local ruleset="$1" tmp="$2" changed=0
++# Reload firewall4 and stamp $1 as loaded. Returns 0 on success, 1 on failure
++# (stamp cleared). Does not install files. Shared by apply reload_runtime,
++# ensure_rules_loaded, and commit_probed_rules.
++firewall_reload_stamp() {
++	local ruleset="$1"
 +
-+	if nft_file_is "$ruleset" && nft_rules_ok "$NFT_FILE"; then
-+		rm -f "$tmp"
-+	else
-+		install_nft_file "$tmp" "$ruleset"
-+		changed=1
-+	fi
 +	NFT_RULESET="$ruleset"
++	if /etc/init.d/firewall reload; then
++		nft_mark_loaded "$ruleset"
++		return 0
++	fi
++	nft_clear_loaded
++	return 1
++}
 +
-+	if nft_loaded_is "$ruleset" && [ "$changed" -eq 0 ]; then
++# Disk already has a validated ruleset: reload+stamp if needed, never install.
++# Always returns 0 so hotplug cannot abort later iface scripts.
++ensure_rules_loaded() {
++	local ruleset="$1"
++
++	NFT_RULESET="$ruleset"
++	if nft_loaded_is "$ruleset"; then
++		return 0
++	fi
++	if firewall_reload_stamp "$ruleset"; then
++		logger -t internet "internet bridge nft reloaded $ruleset rules"
++		return 0
+ 	fi
++	warn "firewall reload of internet bridge $ruleset rules failed; the next wan ifup retries"
++	return 0
++}
++
++# Install a rendered staging file when disk is not already this ruleset, then
++# reload+stamp. Refuses empty/incomplete tmp (must carry the ruleset header).
++# Always returns 0: hotplug must not abort later iface scripts.
++# Caller must hold nft_file_lock.
++commit_probed_rules() {
++	local ruleset="$1" tmp="$2"
+ 
+-	if ! nft -c -f "$tmp" >/dev/null 2>&1; then
++	if nft_file_is "$ruleset" && nft_rules_ok "$NFT_FILE"; then
+ 		rm -f "$tmp"
+-		fail "Generated nftables rules failed validation"
++		ensure_rules_loaded "$ruleset"
++		return 0
+ 	fi
+ 
+-	chmod 0644 "$tmp"
+-	mv -f "$tmp" "$NFT_FILE"
++	if ! grep -qx "# internet-apply bridge ruleset: $ruleset" "$tmp" 2>/dev/null; then
++		rm -f "$tmp"
++		warn "internet bridge nft: refusing to install incomplete staging file for $ruleset"
 +		return 0
 +	fi
 +
-+	# Stamp missing or inconsistent with disk: always reload. Do not blind-mark
-+	# filter as loaded just because the file is already on disk (START=18 may
-+	# have written it without a successful firewall reload into the kernel).
-+	if /etc/init.d/firewall reload; then
-+		nft_mark_loaded "$ruleset"
-+		if [ "$changed" -eq 1 ] && [ "$ruleset" = 'full' ]; then
++	install_nft_file "$tmp" "$ruleset"
++	if firewall_reload_stamp "$ruleset"; then
++		if [ "$ruleset" = 'full' ]; then
 +			logger -t internet "internet bridge nft upgraded to full rules (flowtable)"
-+		elif [ "$changed" -eq 1 ]; then
-+			logger -t internet "internet bridge nft kept on PPPoE/IPoE filter fallback"
 +		else
-+			logger -t internet "internet bridge nft reloaded $ruleset rules"
++			logger -t internet "internet bridge nft kept on PPPoE/IPoE filter fallback"
 +		fi
 +		return 0
 +	fi
-+
-+	nft_clear_loaded
 +	warn "firewall reload of internet bridge $ruleset rules failed; the next wan ifup retries"
 +	return 0
 +}
@@ -381,8 +414,7 @@ index ced2d03..5a31c59 100755
 +		warn "internet bridge nft reprobe: cannot stage rules"
 +		return 0
 +	}
-+	render_bridge_rules "$tmp" full
-+	if nft_rules_ok "$tmp"; then
++	if stage_validated_rules "$tmp" full; then
 +		if nft_file_is full && nft_loaded_is full && nft_rules_ok "$NFT_FILE"; then
 +			rm -f "$tmp"
 +			NFT_RULESET=full
@@ -393,14 +425,9 @@ index ced2d03..5a31c59 100755
 +	fi
 +	rm -f "$tmp"
 +
-+	# Disk already holds a valid filter: still go through commit_probed_rules so
-+	# a missing/inconsistent stamp triggers firewall reload instead of a blind mark.
++	# Disk already holds a valid filter: reload+stamp only — never an empty tmp.
 +	if nft_file_is filter && nft_rules_ok "$NFT_FILE"; then
-+		tmp="$(stage_nft_file)" || {
-+			warn "internet bridge nft reprobe: cannot stage rules"
-+			return 0
-+		}
-+		commit_probed_rules filter "$tmp"
++		ensure_rules_loaded filter
 +		return 0
 +	fi
 +
@@ -408,27 +435,22 @@ index ced2d03..5a31c59 100755
 +		warn "internet bridge nft reprobe: cannot stage rules"
 +		return 0
 +	}
-+	render_bridge_rules "$tmp" filter
-+	if ! nft_rules_ok "$tmp"; then
-+		rm -f "$tmp"
-+		warn "internet bridge nft reprobe: filter rules also rejected (${NFT_LAST_NFT_ERROR})"
++	if stage_validated_rules "$tmp" filter; then
++		commit_probed_rules filter "$tmp"
 +		return 0
 +	fi
-+	commit_probed_rules filter "$tmp"
++	rm -f "$tmp"
++	warn "internet bridge nft reprobe: filter rules also rejected (${NFT_LAST_NFT_ERROR})"
++	return 0
  }
  
  #
-@@ -1013,18 +1251,32 @@ reload_runtime() {
+@@ -1013,18 +1278,27 @@ reload_runtime() {
  
  	if [ "$ENABLED" -eq 1 ]; then
  		# The bridge has to be filtered from its first forwarded frame.
 -		/etc/init.d/firewall reload || fail "firewall4 reload failed"
-+		if /etc/init.d/firewall reload; then
-+			nft_mark_loaded "$NFT_RULESET"
-+		else
-+			nft_clear_loaded
-+			fail "firewall4 reload failed"
-+		fi
++		firewall_reload_stamp "$NFT_RULESET" || fail "firewall4 reload failed"
  		ubus call network reload >/dev/null || fail "netifd reload failed"
  	else
  		ubus call network reload >/dev/null || fail "netifd reload failed"
@@ -453,7 +475,7 @@ index ced2d03..5a31c59 100755
  load_iptv_port
  load_voice_port
  config_load network
-@@ -1039,5 +1291,5 @@ write_firewall_config
+@@ -1039,5 +1313,5 @@ write_firewall_config
  write_offload_defaults
  reload_runtime
  
