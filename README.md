@@ -72,6 +72,7 @@ XG2010G 与 XR1710G 同属 Airoha AN7581 平台，但硬件布局和软件包集
 - 使用 Airoha `an7581` 目标和独立的 `gemtek_xg2010g-ubi` 镜像配置。
 - PON 驱动和用户态依赖由 [`feeds.conf.default`](feeds.conf.default) 中的 `pon_drivers`、`pon_userspace` feed 获取，使用 `kmod-airoha-en7572`、`kmod-airoha-xpon`、`airoha-ponctl`、`airoha-pond` 和 `luci-app-onu` 新栈；IPTV 配置已并入 `luci-app-onu` 的 ONU 菜单，不再选择独立的 `luci-app-iptv`。
 - `pon_userspace` feed 和 `luci-app-onu` 只在 `2010.config` 启用；`1710.config` 明确禁用该 feed 和 ONU LuCI 软件包。
+- 桥接上网的 nft 先探测含 flowtable 的完整表，`nft -c` 失败再降级为 PPPoE/IPoE 过滤。说明见 [docs/xg2010g-onu-bridge-nft-fallback.md](docs/xg2010g-onu-bridge-nft-fallback.md)。
 - `2010.config` 只选择 XG2010G 的 PON、TOD 和 EN7581 PCM-SPI 相关软件包，并通过 [profile isolation 检查](scripts/check-gemtek-profile-isolation.sh) 拒绝混入 XR1710G 的 Wi-Fi 软件包。
 - 设备树禁用当前没有足够硬件证据的 PCIe、USB 和 eMMC，保留 EN7581 xPON、PON PHY、TOD、I2C 和 PCM-SPI 相关节点。
 - 语音控制路径按原厂 5.4 固件的 `slic3_silicon`/`pcm1`/`spi` 模块序列恢复：XG2010G 设备树启用 EN7581 AFE，PCM 控制器初始化为 2 路 8-bit timeslot，并提供 25 帧 TX/RX DMA 环和 `/dev/pcm1` 20 ms 帧读写口。
