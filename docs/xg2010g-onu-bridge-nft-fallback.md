@@ -30,6 +30,7 @@
 - 内核仍拒绝 flowtable 时，过滤表保持不变；已成功加载且 stamp 匹配时，不会每次 ifup 都重载防火墙。
 - **只有** firewall reload（经公共 `firewall_reload_stamp` / `reload_runtime`）成功后才写“已加载”stamp。reload 失败会清掉 stamp，下一次 `wan` ifup 再试。磁盘上已是合法 filter、只需补 stamp 时走 `ensure_rules_loaded`（只 reload，不传空 staging、不 `mv`），不会盲标记已加载。
 - LuCI apply 与 hotplug reprobe 共用 `stage_validated_rules`（full→filter 探测）和一把 `/var/lock/internet-nft-reprobe.lock`，避免探测顺序漂移或并发写 `/etc/internet.nft`。`commit_probed_rules` 在 install 前要求 staging 含 ruleset 头，拒绝空文件覆盖。
+- reprobe 在 `stage_validated_rules full` 之前用公共谓词 `nft_already_live`（磁盘/stamp/`nft -c` 均已是目标 ruleset）短路：已 live full 时直接返回，省掉这次 staging 与 `nft -c`；stage 成功后的 early return 也调同一函数，避免重复谓词。
 - reprobe 要求 bridge 且 `ports` 非空；端口为空时只 warn 并跳过，不写文件。
 
 ## 和 `fix/xg2010g-onu-bridge-rules` 的差别
