@@ -1,0 +1,69 @@
+From: PPP upstream
+Subject: pppd: fix script child database lifetime and script instance names
+
+Backport the runtime fixes from upstream PR #638, merged as
+13ba8a58e9bfd4fe961a5043c6bb5ae9843d5bb7. Keep the 2.5.4 release
+source and its security fixes. The upstream testsuite additions are not
+included here; local regression coverage is in tests/test_ppp_script_child.py.
+
+Upstream: https://github.com/ppp-project/ppp/pull/638
+
+--- a/pppd/auth.c
++++ b/pppd/auth.c
+@@ -790,7 +790,7 @@ link_down(int unit)
+ 	if (auth_script_state == s_up && auth_script_pid == 0) {
+ 	    ppp_get_link_stats(NULL);
+ 	    auth_script_state = s_down;
+-	    auth_script(path_auth_down, "auth-up");
++	    auth_script(path_auth_down, "auth-down");
+ 	}
+     }
+     if (!mp_on())
+--- a/pppd/eap-tls.c
++++ b/pppd/eap-tls.c
+@@ -985,7 +985,8 @@ int eaptls_send(struct eaptls_session *ets, bool is_server, u_char ** outp)
+ 	    /* This serves mainly to advance the TLS handshake process. */
+             res = SSL_read(ets->ssl, dummy, sizeof(dummy));
+ 	    if (res >= 0)
+-		dbglog("got %d bytes from SSL_read: %.*B", MIN(res, 20), dummy);
++		dbglog("got %d bytes from SSL_read: %.*B",
++		       res, MIN(res, 20), dummy);
+         }
+ 
+ 	/*
+--- a/pppd/ipcp.c
++++ b/pppd/ipcp.c
+@@ -2153,7 +2153,7 @@ ipcp_script_done(void *arg)
+     case s_down:
+ 	if (ipcp_fsm[0].state == OPENED) {
+ 	    ipcp_script_state = s_up;
+-	    ipcp_script(path_ipup, 0, "ip-down");
++	    ipcp_script(path_ipup, 0, "ip-up");
+ 	}
+ 	break;
+     }
+--- a/pppd/ipv6cp.c
++++ b/pppd/ipv6cp.c
+@@ -1400,7 +1400,7 @@ ipv6cp_up(fsm *f)
+      */
+     if (ipv6cp_script_state == s_down && ipv6cp_script_pid == 0) {
+ 	ipv6cp_script_state = s_up;
+-	ipv6cp_script(path_ipv6up, "ipv6-ip");
++	ipv6cp_script(path_ipv6up, "ipv6-up");
+     }
+ }
+ 
+--- a/pppd/main.c
++++ b/pppd/main.c
+@@ -1726,8 +1726,10 @@ ppp_safe_fork(int infd, int outfd, int errfd)
+ 	/* Executing in the child */
+ 	ppp_sys_close();
+ #ifdef PPP_WITH_TDB
+-	if (pppdb != NULL)
++	if (pppdb != NULL) {
+ 		tdb_close(pppdb);
++		pppdb = NULL;	/* tdb_close() can't null the caller's pointer */
++	}
+ #endif
+ 
+ 	/* make sure infd, outfd and errfd won't get tromped on below */
