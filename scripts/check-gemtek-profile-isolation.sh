@@ -66,6 +66,8 @@ elif grep -Eq '^CONFIG_(TARGET_airoha_an7581_DEVICE|TARGET_DEVICE_airoha_an7581_
 	forbidden_packages='(pbr|luci-app-pbr|luci-i18n-pbr-.*|airoha-an7581-mt7996-board|airoha-en7581-mt7996-npu-firmware|hostapd.*|iw|iw-full|iwinfo|kmod-(mac80211.*|mt76.*|mt7996.*)|ucode-mod-nl80211|wireless-regdb|wpad.*)'
 	forbidden_build_config='CONFIG_TARGET_ROOTFS_INITRAMFS=y'
 	required_packages=(
+		kmod-cryptodev
+		libopenssl-devcrypto
 		kmod-nf-conntrack-bridge
 		kmod-nft-bridge
 		kmod-airoha-en7572
