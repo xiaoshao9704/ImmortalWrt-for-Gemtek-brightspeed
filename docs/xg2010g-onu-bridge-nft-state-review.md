@@ -106,8 +106,25 @@ python3 tests/test_onu_bridge_nft.py --onu-source /tmp/onu-internet-apply --fw4-
 ## 验证边界和刷机清单
 
 本地测试不能证明真实 bridge flowtable、PPPoE/IPoE 数据面和 PPE 卸载正常。
-当前分支尚未推送，未为本修复触发 CI，也没有刷机或读取真实设备状态。
-迁移分支的旧构建不能算本修复的 CI 结果。
+本分支已推送；本修复尚未触发 GitHub CI，也没有刷机或读取真实设备状态。
+迁移分支 `600d5e4ba1` 的 GitHub 构建成功，但不包含本修复，不能算本修复的 CI 结果。
+
+2026-11-09 已在本地 Linux 环境使用 `2010.config` 完整构建代码提交 `bcd52b419c`，
+生成 `immortalwrt-naoki66-xg2010g-20261109-bcd52b41-airoha-an7581-gemtek_xg2010g-ubi-squashfs-sysupgrade.itb`：
+
+- 实际大小 **23,110,715 字节（22.04 MiB）**；128 MiB 是机型打包上限。
+- SHA256：`0db1cc6cf64b6683673eebf0eda1c4d4bda9a3e0b423cf4a9e0afb575866a844`。
+- 机型隔离、`nf-flowtable-7`、编译后的 PPPoE 帧长处理、PON r71 和 1.4 GHz 设备树检查通过。
+- 实机原 294 个包映射到当前 292 个 APK 名称，加上 `luci-app-pon-status`，映像清单为 293 个包。
+- 已核验 FIT 内 kernel、设备树和 rootfs 的 CRC32／SHA1；直接从 ITB 的 SquashFS 读取
+  `internet-apply` 和 hotplug 脚本，与已打补丁的公开 r26 feed 逐字一致，所有权为 root。
+
+本地有效配额为 4 CPU／16 GiB，`make -j4 world` 从启动至完成约 2 小时 56 分钟，
+包含一次 rootfs 安装问题定位和重试。受限环境的真实 `chown` 返回 `EINVAL`，通过
+fakeroot 现成的 `FAKEROOTDONTTRYCHOWN=1` 保留模拟所有权后完成，未修改固件源码或包选择。
+本地 Rust 阶段约 100 分钟，旧 GitHub 构建同阶段约 41 分钟；此次本地首次构建较慢。
+不同提交、宿主工具和缓存条件意味着这不是严格的 CPU 基准，也不能代表 Mac mini 的性能。
+以上为构建与产物检查，不能替代以下设备验证。
 
 刷机后需：
 
