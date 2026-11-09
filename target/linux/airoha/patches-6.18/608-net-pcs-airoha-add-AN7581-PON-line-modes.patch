@@ -9,16 +9,6 @@ sequence and register layout used by AN7581 and AN7583.
 
 Signed-off-by: pbs05 <27010143+pbs05@users.noreply.github.com>
 ---
- drivers/net/pcs/airoha/pcs-airoha-common.c |  247 ++++
- drivers/net/pcs/airoha/pcs-airoha.h        |  105 ++
- drivers/net/pcs/airoha/pcs-an7581.c        | 1459 ++++++++++++++++++++
- drivers/net/pcs/airoha/pcs-an7583.c        |  799 ++++++++---
- include/linux/pcs/pcs-airoha.h             |   85 ++
- 5 files changed, 2472 insertions(+), 223 deletions(-)
- create mode 100644 include/linux/pcs/pcs-airoha.h
-
-Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
-===================================================================
 --- a/drivers/net/pcs/airoha/pcs-airoha-common.c
 +++ b/drivers/net/pcs/airoha/pcs-airoha-common.c
 @@ -5,9 +5,11 @@
@@ -33,10 +23,11 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
  #include <linux/pcs/pcs-provider.h>
  #include <linux/phy/phy.h>
  #include <linux/phylink.h>
-@@ -183,6 +185,244 @@ static int airoha_pcs_setup_scu(struct a
+@@ -187,6 +189,244 @@
+ 
  	return 0;
  }
- 
++
 +/* PON PMA electrical interface registers used by phy_trans_model_setting(). */
 +#define AIROHA_PCS_PMA_XPON_SETTING_0	0x270
 +#define AIROHA_PCS_PMA_XPON_SETTING_1	0x274
@@ -274,11 +265,10 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
 +	return 0;
 +}
 +EXPORT_SYMBOL_GPL(airoha_pcs_pon_get_rx_status);
-+
+ 
  static void airoha_pcs_init_usxgmii(struct airoha_pcs_priv *priv, int index)
  {
- 	const struct airoha_pcs_match_data *data = priv->data;
-@@ -1251,6 +1491,12 @@ static int airoha_pcs_probe(struct platf
+@@ -1263,6 +1503,12 @@
  
  	priv->dev = dev;
  	priv->data = data;
@@ -291,7 +281,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
  
  	if (data->port_type == AIROHA_PCS_USB ||
  	    device_is_compatible(dev, "airoha,an7583-pcs-pcie")) {
-@@ -1403,6 +1649,9 @@ static const struct airoha_pcs_match_dat
+@@ -1400,6 +1646,9 @@
  	.alloc_regmap_fields = an7581_pcs_alloc_regmap_fields,
  	.bringup = an7581_pcs_bringup,
  	.link_up = an7581_pcs_phya_link_up,
@@ -301,7 +291,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
  };
  
  static const struct airoha_pcs_match_data an7581_pcs_pcie = {
-@@ -1435,8 +1684,12 @@ static const struct airoha_pcs_match_dat
+@@ -1432,8 +1681,12 @@
  	.port_type = AIROHA_PCS_PON,
  	.usxgmii_rx_gb_out_vld_tweak = true,
  	.usxgmii_xfi_mode_sel = true,
@@ -314,11 +304,9 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha-common.c
  };
  
  static const struct airoha_pcs_match_data an7583_pcs_pcie = {
-Index: b/drivers/net/pcs/airoha/pcs-airoha.h
-===================================================================
 --- a/drivers/net/pcs/airoha/pcs-airoha.h
 +++ b/drivers/net/pcs/airoha/pcs-airoha.h
-@@ -1252,6 +1252,9 @@
+@@ -1254,6 +1254,9 @@
  #define   AIROHA_PCS_PMA_CK_RATE_5		FIELD_PREP_CONST(AIROHA_PCS_PMA_CK_RATE, 0x2)
  #define   AIROHA_PCS_PMA_AMP			GENMASK(10, 8)
  #define   AIROHA_PCS_PMA_PRBS_SEL		GENMASK(2, 0)
@@ -328,7 +316,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  #define AIROHA_PCS_PMA_RX_FLL_5			0x184
  #define   AIROHA_PCS_PMA_FLL_IDAC_MIN		GENMASK(26, 16)
  #define   AIROHA_PCS_PMA_FLL_IDAC_MAX		GENMASK(10, 0)
-@@ -1325,6 +1328,9 @@
+@@ -1327,6 +1330,9 @@
  #define AIROHA_PCS_PMA_TX_CALIB_0		0x264
  #define   AIROHA_PCS_PMA_TXCALIB_FORCE_TERMP_SEL GENMASK(25, 24)
  #define   AIROHA_PCS_PMA_TXCALIB_FORCE_TERMP_SEL_EN BIT(16)
@@ -338,14 +326,15 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  #define AIROHA_PCS_PMA_RX_TORGS_DEBUG_11	0x290
  #define   AIROHA_PCS_PMA_EYE_EB			GENMASK(14, 8)
  #define   AIROHA_PCS_PMA_EYE_EU			GENMASK(6, 0)
-@@ -1643,5 +1649,6 @@ struct airoha_pcs_priv {
+@@ -1646,6 +1652,7 @@
+ struct airoha_pcs_priv {
  	struct device *dev;
  	const struct airoha_pcs_match_data *data;
 +	u8 pon_mode;
  
  	struct airoha_pcs_port *ports;
  
-@@ -1660,6 +1667,17 @@ struct airoha_pcs_priv {
+@@ -1663,6 +1670,17 @@
  	struct phy *phy;
  
  	bool manual_rx_calib;
@@ -363,7 +352,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  };
  
  struct airoha_pcs_port {
-@@ -1678,11 +1696,17 @@ struct airoha_pcs_match_data {
+@@ -1682,11 +1700,17 @@
  	bool usxgmii_rx_gb_out_vld_tweak;
  	bool usxgmii_xfi_mode_sel;
  
@@ -381,7 +370,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  };
  
  #define to_airoha_pcs_port(n) container_of(n, struct airoha_pcs_port, pcs)
-@@ -1692,6 +1716,16 @@ int an7581_pcs_alloc_regmap_fields(struc
+@@ -1696,6 +1720,16 @@
  int an7581_pcs_pcie_alloc_regmap_fields(struct airoha_pcs_priv *priv);
  int an7581_pcs_bringup(struct airoha_pcs_priv *priv,
  		       int index, phy_interface_t interface);
@@ -398,7 +387,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  int an7581_pcs_usb_bringup(struct airoha_pcs_priv *priv,
  			   int index, phy_interface_t interface);
  
-@@ -1714,6 +1748,46 @@ static inline int an7581_pcs_bringup(str
+@@ -1718,6 +1752,46 @@
  	return -EOPNOTSUPP;
  }
  
@@ -445,7 +434,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  static inline int an7581_pcs_usb_bringup(struct airoha_pcs_priv *priv,
  					 int index, phy_interface_t interface)
  {
-@@ -1733,19 +1807,50 @@ static inline int an7581_pcs_rxlock_work
+@@ -1737,20 +1811,51 @@
  #endif
  
  #ifdef CONFIG_PCS_AIROHA_AN7583
@@ -473,7 +462,7 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
  {
  	return -EOPNOTSUPP;
  }
-+
+ 
 +static inline int an7583_pcs_pon_start_rx(struct airoha_pcs_priv *priv,
 +					   int index,
 +					   phy_interface_t interface)
@@ -493,22 +482,21 @@ Index: b/drivers/net/pcs/airoha/pcs-airoha.h
 +{
 +	return -EOPNOTSUPP;
 +}
- 
++
  static inline int an7583_pcs_usb_phya_bringup(struct airoha_pcs_priv *priv,
  					      int index, phy_interface_t interface)
-Index: b/drivers/net/pcs/airoha/pcs-an7581.c
-===================================================================
+ {
 --- a/drivers/net/pcs/airoha/pcs-an7581.c
 +++ b/drivers/net/pcs/airoha/pcs-an7581.c
-@@ -4,6 +4,7 @@
-  * Author: Christian Marangi <ansuelsmth@gmail.com>
+@@ -5,6 +5,7 @@
   */
+ #include <linux/math.h>
  #include <linux/phy/phy.h>
 +#include <linux/pcs/pcs-airoha.h>
  #include <linux/phylink.h>
  #include <linux/regmap.h>
  
-@@ -1821,6 +1822,1476 @@ static void an7581_pcs_cdr_reset(struct
+@@ -1825,6 +1826,1476 @@
  			  AIROHA_PCS_PMA_FORCE_SEL_DA_CDR_LPF_LCK2DATA);
  }
  
@@ -1985,7 +1973,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7581.c
  static int an7581_pcs_phya_bringup(struct airoha_pcs_priv *priv,
  				   int index, phy_interface_t interface)
  {
-@@ -1834,6 +3296,8 @@ static int an7581_pcs_phya_bringup(struc
+@@ -1834,6 +3305,8 @@
  
  	an7581_pcs_tx_bringup(priv, index, interface);
  	an7581_pcs_rx_bringup(priv, index, interface);
@@ -1994,11 +1982,9 @@ Index: b/drivers/net/pcs/airoha/pcs-an7581.c
  
  	usleep_range(100, 200);
  
-Index: b/drivers/net/pcs/airoha/pcs-an7583.c
-===================================================================
 --- a/drivers/net/pcs/airoha/pcs-an7583.c
 +++ b/drivers/net/pcs/airoha/pcs-an7583.c
-@@ -4,11 +4,79 @@
+@@ -4,10 +4,78 @@
   * Author: Christian Marangi <ansuelsmth@gmail.com>
   */
  #include <linux/phy/phy.h>
@@ -2008,7 +1994,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  #include <linux/regmap.h>
  
  #include "pcs-airoha.h"
- 
++
 +/* AN7583 PON line selectors for TXPLL, TX, RX, analog PLL and presets. */
 +struct an7583_pcs_pon_rate {
 +	u8 txpll;
@@ -2074,11 +2060,10 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +
 +	return 0;
 +}
-+
+ 
  static void an7583_pcs_dig_reset_hold(struct airoha_pcs_priv *priv,
  				      int index)
- {
-@@ -62,27 +130,45 @@ static void an7583_pcs_dig_reset_release
+@@ -62,27 +130,45 @@
  static void an7583_pcs_common_phya_txpll(struct airoha_pcs_priv *priv,
  					 int index, phy_interface_t interface)
  {
@@ -2142,7 +2127,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	}
  
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_PXP_CDR_PR_IDAC,
-@@ -118,65 +204,99 @@ static void an7583_pcs_common_phya_tx(st
+@@ -118,65 +204,99 @@
  	u32 ckin_divisor;
  	u32 tx_rate_ctrl;
  
@@ -2294,7 +2279,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	}
  
  	regmap_set_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TX_CKLDO_EN,
-@@ -239,13 +359,13 @@ static void an7583_pcs_common_phya_tx(st
+@@ -239,13 +359,13 @@
  			   FIELD_PREP(AIROHA_PCS_PMA_TX_BEN_EXTEN_FTUNE, tx_ben_exten_ftune));
  
  	if (data->port_type == AIROHA_PCS_PON) {
@@ -2315,14 +2300,11 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  		regmap_update_bits(pcs_pma, AIROHA_PCS_PMA_MD32_MEM_CLK_CTRL,
  			   AIROHA_PCS_PMA_MD32PM_CK_SEL,
-@@ -273,48 +393,123 @@ static void an7583_pcs_common_phya_rx(st
+@@ -273,48 +393,123 @@
  	u32 lpf_ratio;
  	u32 rx_rev0;
  	u32 osr;
-+	bool cdr_pr_xfick_en;
-+	bool phyck_sel_force;
-+	bool phyck_rstb;
- 
+-
 -	switch (interface) {
 -	case PHY_INTERFACE_MODE_SGMII:
 -	case PHY_INTERFACE_MODE_1000BASEX:
@@ -2364,6 +2346,10 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 -		break;
 -	default:
 -		return;
++	bool cdr_pr_xfick_en;
++	bool phyck_sel_force;
++	bool phyck_rstb;
++
 +	if (data->port_type == AIROHA_PCS_PON) {
 +		/* Select the downstream CDR, sample rate and RX bus width. */
 +		switch (an7583_pcs_pon_rate(priv)->rx) {
@@ -2480,7 +2466,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	}
  
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_RX_REV_0,
-@@ -353,21 +548,6 @@ static void an7583_pcs_common_phya_rx(st
+@@ -353,21 +548,6 @@
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_DIG_RESERVE_12,
  			AIROHA_PCS_PMA_RESERVE_12_FEOS_0);
  
@@ -2502,7 +2488,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_RX_REV_0,
  			   AIROHA_PCS_ANA_RX_REV_0, rx_rev0);
  
-@@ -404,18 +584,19 @@ static void an7583_pcs_common_phya_rx(st
+@@ -404,30 +584,25 @@
  			   AIROHA_PCS_ANA_RX_PHYCK_SEL,
  			   FIELD_PREP(AIROHA_PCS_ANA_RX_PHYCK_SEL, phyck_sel));
  
@@ -2526,53 +2512,29 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  			   FIELD_PREP(AIROHA_PCS_ANA_RX_PHYCK_DIV, phyck_div));
  
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_CDR_LPF_RATIO,
-@@ -423,12 +604,6 @@ static void an7583_pcs_common_phya_rx(st
+ 			   AIROHA_PCS_ANA_CDR_LPF_RATIO,
  			   FIELD_PREP(AIROHA_PCS_ANA_CDR_LPF_RATIO,
  				      lpf_ratio));
- 
+-
 -	if (interface == PHY_INTERFACE_MODE_5GBASER)
 -		busbit_sel = AIROHA_PCS_ANA_RX_BUSBIT_SEL_FORCE |
 -			     AIROHA_PCS_ANA_RX_BUSBIT_SEL_16BIT;
 -	else
 -		busbit_sel = 0;
--
+ 
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_RX_BUSBIT_SEL,
  			   AIROHA_PCS_ANA_RX_BUSBIT_SEL_FORCE |
- 			   AIROHA_PCS_ANA_RX_BUSBIT_SEL,
-@@ -459,61 +634,83 @@ static void an7583_pcs_common_phya_ana(s
+@@ -459,61 +634,83 @@
  	u32 vco_cfix;
  	bool sdm_di;
  	bool vcodiv;
-+	bool postdiv_d256;
- 
+-
 -	switch (interface) {
 -	case PHY_INTERFACE_MODE_SGMII:
 -	case PHY_INTERFACE_MODE_1000BASEX:
 -		if (data->port_type == AIROHA_PCS_PON) {
--			txpll_chp_ibias = 0x18;
--			lpf_br = 0xa;
--			lpf_bwr = 0x16;
--		} else {
--			txpll_chp_ibias = 0x31;
--			lpf_br = 0x5;
--			lpf_bwr = 0xb;
--		}
--		vco_cfix = 0x3;
--		tcl_amp_vref = 0xb;
--		vcodiv = false;
--		sdm_hren = data->port_type == AIROHA_PCS_PON;
--		sdm_ifm = data->port_type == AIROHA_PCS_PON;
--		sdm_di = data->port_type == AIROHA_PCS_PON;
--		chp_double_en = false;
--		break;
--	case PHY_INTERFACE_MODE_2500BASEX:
--		txpll_chp_ibias = 0x1e;
--		if (data->port_type == AIROHA_PCS_PCIE) {
--			lpf_br = 0xa;
--			lpf_bwr = 0x16;
--		} else {
--			lpf_br = 0x5;
--			lpf_bwr = 0xb;
++	bool postdiv_d256;
++
 +	if (data->port_type == AIROHA_PCS_PON) {
 +		/* Select the 10.3125G or 9.95328G VCO parameters. */
 +		switch (an7583_pcs_pon_rate(priv)->ana) {
@@ -2584,34 +2546,17 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +			break;
 +		default:
 +			return;
- 		}
--		vco_cfix = 0x0;
--		tcl_amp_vref = 0xe;
--		vcodiv = true;
--		sdm_hren = false;
--		sdm_ifm = false;
--		sdm_di = false;
--		chp_double_en = data->port_type == AIROHA_PCS_PON ||
--				data->port_type == AIROHA_PCS_PCIE;
--		break;
--	case PHY_INTERFACE_MODE_5GBASER:
--	case PHY_INTERFACE_MODE_10GBASER:
--	case PHY_INTERFACE_MODE_USXGMII:
++		}
 +
- 		txpll_chp_ibias = 0x18;
- 		lpf_br = 0xa;
- 		lpf_bwr = 0x16;
--		sdm_hren = true;
--		vco_cfix = 0x2;
- 		tcl_amp_vref = 0xb;
- 		vcodiv = false;
++		txpll_chp_ibias = 0x18;
++		lpf_br = 0xa;
++		lpf_bwr = 0x16;
++		tcl_amp_vref = 0xb;
++		vcodiv = false;
 +		sdm_hren = true;
- 		sdm_ifm = true;
- 		sdm_di = true;
- 		chp_double_en = false;
--		break;
--	default:
--		return;
++		sdm_ifm = true;
++		sdm_di = true;
++		chp_double_en = false;
 +		postdiv_d256 = false;
 +	} else {
 +		switch (interface) {
@@ -2650,9 +2595,13 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +		case PHY_INTERFACE_MODE_5GBASER:
 +		case PHY_INTERFACE_MODE_10GBASER:
 +		case PHY_INTERFACE_MODE_USXGMII:
-+			txpll_chp_ibias = 0x18;
-+			lpf_br = 0xa;
-+			lpf_bwr = 0x16;
+ 			txpll_chp_ibias = 0x18;
+ 			lpf_br = 0xa;
+ 			lpf_bwr = 0x16;
+-		} else {
+-			txpll_chp_ibias = 0x31;
+-			lpf_br = 0x5;
+-			lpf_bwr = 0xb;
 +			sdm_hren = true;
 +			vco_cfix = 0x2;
 +			tcl_amp_vref = 0xb;
@@ -2664,11 +2613,53 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +			break;
 +		default:
 +			return;
-+		}
+ 		}
+-		vco_cfix = 0x3;
+-		tcl_amp_vref = 0xb;
+-		vcodiv = false;
+-		sdm_hren = data->port_type == AIROHA_PCS_PON;
+-		sdm_ifm = data->port_type == AIROHA_PCS_PON;
+-		sdm_di = data->port_type == AIROHA_PCS_PON;
+-		chp_double_en = false;
+-		break;
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		txpll_chp_ibias = 0x1e;
+-		if (data->port_type == AIROHA_PCS_PCIE) {
+-			lpf_br = 0xa;
+-			lpf_bwr = 0x16;
+-		} else {
+-			lpf_br = 0x5;
+-			lpf_bwr = 0xb;
+-		}
+-		vco_cfix = 0x0;
+-		tcl_amp_vref = 0xe;
+-		vcodiv = true;
+-		sdm_hren = false;
+-		sdm_ifm = false;
+-		sdm_di = false;
+-		chp_double_en = data->port_type == AIROHA_PCS_PON ||
+-				data->port_type == AIROHA_PCS_PCIE;
+-		break;
+-	case PHY_INTERFACE_MODE_5GBASER:
+-	case PHY_INTERFACE_MODE_10GBASER:
+-	case PHY_INTERFACE_MODE_USXGMII:
+-		txpll_chp_ibias = 0x18;
+-		lpf_br = 0xa;
+-		lpf_bwr = 0x16;
+-		sdm_hren = true;
+-		vco_cfix = 0x2;
+-		tcl_amp_vref = 0xb;
+-		vcodiv = false;
+-		sdm_ifm = true;
+-		sdm_di = true;
+-		chp_double_en = false;
+-		break;
+-	default:
+-		return;
  	}
  
  	if (data->port_type == AIROHA_PCS_PON ||
-@@ -553,7 +750,7 @@ static void an7583_pcs_common_phya_ana(s
+@@ -553,7 +750,7 @@
  			   AIROHA_PCS_ANA_TXPLL_PLL_RSTB |
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_RST_DLY, 0x4) |
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_REFIN_DIV,
@@ -2677,7 +2668,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  	/* Setup SDM */
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_SDM_DI_EN,
-@@ -564,7 +761,7 @@ static void an7583_pcs_common_phya_ana(s
+@@ -564,7 +761,7 @@
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_SDM_MODE, 0) |
  			   (sdm_ifm ? AIROHA_PCS_ANA_TXPLL_SDM_IFM : 0) |
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_SDM_DI_LS,
@@ -2686,7 +2677,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  			   (sdm_di ? AIROHA_PCS_ANA_TXPLL_SDM_DI_EN : 0));
  
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_SDM_ORD,
-@@ -573,7 +770,7 @@ static void an7583_pcs_common_phya_ana(s
+@@ -573,7 +770,7 @@
  			   AIROHA_PCS_ANA_TXPLL_SDM_ORD,
  			   (sdm_hren ? AIROHA_PCS_ANA_TXPLL_SDM_HREN : 0) |
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_SDM_ORD,
@@ -2695,7 +2686,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  	/* Setup SSC */
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_SSC_DELTA1,
-@@ -661,7 +858,7 @@ static void an7583_pcs_common_phya_ana(s
+@@ -661,7 +858,7 @@
  			   AIROHA_PCS_ANA_TXPLL_MMD_PREDIV_MODE |
  			   AIROHA_PCS_ANA_TXPLL_POSTDIV_EN,
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_MMD_PREDIV_MODE,
@@ -2704,14 +2695,15 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  			   AIROHA_PCS_ANA_TXPLL_POSTDIV_EN);
  
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_TCL_AMP_GAIN,
-@@ -669,17 +866,18 @@ static void an7583_pcs_common_phya_ana(s
+@@ -669,17 +866,18 @@
  			   AIROHA_PCS_ANA_TXPLL_TCL_AMP_GAIN,
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_TCL_AMP_VREF, tcl_amp_vref) |
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_TCL_AMP_GAIN,
 -			   	      AIROHA_PCS_ANA_TXPLL_TCL_AMP_GAIN_4));
-+				      AIROHA_PCS_ANA_TXPLL_TCL_AMP_GAIN_4));
- 
+-
 -	if (interface == PHY_INTERFACE_MODE_2500BASEX)
++				      AIROHA_PCS_ANA_TXPLL_TCL_AMP_GAIN_4));
++
 +	if (postdiv_d256)
  		regmap_set_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_TCL_KBAND_VREF,
  				AIROHA_PCS_ANA_TXPLL_POSTDIV_D256_EN);
@@ -2727,7 +2719,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_TCL_KBAND_VREF,
  			   AIROHA_PCS_ANA_TXPLL_TCL_KBAND_VREF,
-@@ -689,7 +887,7 @@ static void an7583_pcs_common_phya_ana(s
+@@ -689,7 +887,7 @@
  			   AIROHA_PCS_ANA_TXPLL_TCL_LPF_BW |
  			   AIROHA_PCS_ANA_TXPLL_TCL_LPF_EN,
  			   FIELD_PREP(AIROHA_PCS_ANA_TXPLL_TCL_LPF_BW,
@@ -2736,7 +2728,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  			   AIROHA_PCS_ANA_TXPLL_TCL_LPF_EN);
  
  	regmap_set_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_TXPLL_SDM_ORD,
-@@ -1048,7 +1246,10 @@ static void an7583_pcs_common_phya_tx_on
+@@ -1048,7 +1246,10 @@
  {
  	struct regmap *pcs_pma = priv->pcs_pma[index];
  	u32 xfi_tx_term_sel = 0x1;
@@ -2748,7 +2740,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_TX_RST_B,
  			AIROHA_PCS_PMA_TX_TOP_RST_B);
-@@ -1063,7 +1264,6 @@ static void an7583_pcs_common_phya_tx_on
+@@ -1063,7 +1264,6 @@
  
  	usleep_range(100, 200);
  
@@ -2756,7 +2748,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	regmap_update_bits(pcs_pma, AIROHA_PCS_PMA_TX_CALIB_0,
  			   AIROHA_PCS_PMA_TXCALIB_FORCE_TERMP_SEL |
  			   AIROHA_PCS_PMA_TXCALIB_FORCE_TERMP_SEL_EN,
-@@ -1080,27 +1280,33 @@ static void an7583_pcs_common_phya_rx_pr
+@@ -1080,27 +1280,33 @@
  	u32 cdr_pr_buf_in_sr;
  	bool cdr_pr_cap_en;
  
@@ -2808,7 +2800,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	}
  
  	/* Setup RX Precondition */
-@@ -1300,6 +1506,43 @@ static void an7583_pcs_common_phya_l2d(s
+@@ -1300,6 +1506,43 @@
  			AIROHA_PCS_PMA_FORCE_DA_CDR_LPF_RSTB);
  }
  
@@ -2852,10 +2844,12 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  static void an7583_pcs_common_phya_tdc_off(struct airoha_pcs_priv *priv,
  					   int index)
  {
-@@ -1330,6 +1573,60 @@ static void an7583_pcs_common_phya_tdc_o
- 	usleep_range(100, 200);
- }
+@@ -1328,6 +1571,60 @@
+ 			  AIROHA_PCS_PMA_LCPLL_TDC_DIG_PWDB);
  
+ 	usleep_range(100, 200);
++}
++
 +static void an7583_pcs_pon_tdc_on(struct airoha_pcs_priv *priv, int index)
 +{
 +	struct regmap *pcs_pma = priv->pcs_pma[index];
@@ -2908,12 +2902,10 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +	udelay(500);
 +	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_RX_FLL_3,
 +			AIROHA_PCS_PMA_FLL_DIG_RST_FORCE);
-+}
-+
+ }
+ 
  static void an7583_pcs_common_phya_rx_oscal(struct airoha_pcs_priv *priv,
- 					    int index)
- {
-@@ -2110,7 +2407,7 @@ static void an7583_pcs_common_phya_eo_sc
+@@ -2110,7 +2407,7 @@
  
  		for (leq_peaking = 0; leq_peaking <= FIELD_MAX(AIROHA_PCS_PMA_FORCE_DA_RX_FE_PEAKING_CTRL); leq_peaking++) {
  			regmap_update_bits(pcs_pma, AIROHA_PCS_PMA_PXP_JCPLL_SDM_SCAN,
@@ -2922,7 +2914,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  					   AIROHA_PCS_PMA_FORCE_DA_RX_FE_PEAKING_CTRL,
  					   AIROHA_PCS_PMA_FORCE_SEL_DA_RX_FE_PEAKING_CTRL |
  					   FIELD_PREP(AIROHA_PCS_PMA_FORCE_DA_RX_FE_PEAKING_CTRL, leq_peaking));
-@@ -2157,19 +2454,23 @@ static void an7583_pcs_common_phya_rxrdy
+@@ -2157,19 +2454,23 @@
  {
  	struct regmap *pcs_pma = priv->pcs_pma[index];
  	u32 xfi_rx_term_sel = 0x1;
@@ -2942,13 +2934,14 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  			  AIROHA_PCS_PMA_SW_RX_FIFO_RST_N);
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_SW_RST_SET,
  			AIROHA_PCS_PMA_SW_RX_FIFO_RST_N);
-+	udelay(100);
- 
+-
 -	/* TODO HANDLE EFUSE */
++	udelay(100);
++
  	regmap_update_bits(priv->pcs_ana, AIROHA_PCS_ANA_PXP_RX_SIGDET_NOVTH,
  			   AIROHA_PCS_ANA_RX_FE_50OHMS_SEL,
  			   FIELD_PREP(AIROHA_PCS_ANA_RX_FE_50OHMS_SEL,
-@@ -2212,7 +2513,10 @@ static void an7583_pcs_first_plug_in(str
+@@ -2212,7 +2513,10 @@
  	    data->port_type == AIROHA_PCS_PCIE)
  		an7583_pcs_common_phya_tdc_off(priv, index);
  	an7583_pcs_common_phya_rx_on(priv, index);
@@ -2960,7 +2953,7 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  
  	regmap_set_bits(pcs_pma, AIROHA_PCS_PMA_SW_RST_SET,
  			AIROHA_PCS_PMA_SW_REF_RST_N);
-@@ -2228,10 +2532,15 @@ static void an7583_pcs_first_plug_in(str
+@@ -2228,10 +2532,15 @@
  
  	an7583_pcs_dig_reset_release(priv, index);
  
@@ -2978,10 +2971,13 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
  	an7583_pcs_common_phya_rxrdy(priv, index);
  	if (data->port_type == AIROHA_PCS_PON ||
  	    data->port_type == AIROHA_PCS_PCIE)
-@@ -2295,6 +2604,50 @@ int an7583_pcs_common_phya_bringup(struc
+@@ -2292,6 +2601,50 @@
+ 	an7583_pcs_first_plug_in(priv, index, interface);
  
- 	return 0;
- }
+ 	an7583_pcs_ana_reset_release(priv, index);
++
++	return 0;
++}
 +
 +int an7583_pcs_pon_start_rx(struct airoha_pcs_priv *priv, int index,
 +			    phy_interface_t interface)
@@ -3023,14 +3019,9 @@ Index: b/drivers/net/pcs/airoha/pcs-an7583.c
 +	an7583_pcs_common_phya_tdc_off(priv, index);
 +	an7583_pcs_pon_fll_reset(priv, index);
 +	an7583_pcs_pon_l2r(priv, index);
-+
-+	return 0;
-+}
  
- void an7583_pcs_common_phya_link_up(struct airoha_pcs_priv *priv, int index)
- {
-Index: b/include/linux/pcs/pcs-airoha.h
-===================================================================
+ 	return 0;
+ }
 --- /dev/null
 +++ b/include/linux/pcs/pcs-airoha.h
 @@ -0,0 +1,87 @@

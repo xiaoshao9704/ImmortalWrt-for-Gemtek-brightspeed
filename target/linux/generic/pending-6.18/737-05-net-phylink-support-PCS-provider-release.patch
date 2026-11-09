@@ -33,14 +33,9 @@ PCS provider release.
 
 Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 ---
- drivers/net/pcs/pcs.c     |  47 +++++++++++++
- drivers/net/phy/phylink.c | 143 ++++++++++++++++++++++++++++++++++++--
- include/linux/pcs/pcs.h   |  69 ++++++++++++++++++
- 3 files changed, 252 insertions(+), 7 deletions(-)
-
 --- a/drivers/net/pcs/pcs.c
 +++ b/drivers/net/pcs/pcs.c
-@@ -22,6 +22,19 @@ struct fwnode_pcs_provider {
+@@ -22,6 +22,19 @@
  
  static LIST_HEAD(fwnode_pcs_providers);
  static DEFINE_MUTEX(fwnode_pcs_mutex);
@@ -60,7 +55,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  struct phylink_pcs *fwnode_pcs_simple_xlate(struct fwnode_reference_args *pcsspec,
  					    void *data)
-@@ -74,6 +87,11 @@ void fwnode_pcs_del_provider(struct fwno
+@@ -74,6 +87,11 @@
  
  	mutex_unlock(&fwnode_pcs_mutex);
  
@@ -72,10 +67,11 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  	fwnode_handle_put(pp->fwnode);
  	kfree(pp);
  }
-@@ -183,6 +201,35 @@ struct phylink_pcs *fwnode_pcs_get(const
+@@ -182,6 +200,35 @@
+ 	return __fwnode_pcs_get(fwnode, index, NULL);
  }
  EXPORT_SYMBOL_GPL(fwnode_pcs_get);
- 
++
 +bool fwnode_pcs_matches_provider(struct fwnode_pcs_provider *provider,
 +				 const struct fwnode_handle *fwnode,
 +				 struct phylink_pcs *pl_pcs)
@@ -104,10 +100,9 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 +	return false;
 +}
 +EXPORT_SYMBOL_GPL(fwnode_pcs_matches_provider);
-+
+ 
  unsigned int fwnode_phylink_pcs_count(struct fwnode_handle *fwnode)
  {
- 	struct fwnode_reference_args out_args;
 --- a/drivers/net/phy/phylink.c
 +++ b/drivers/net/phy/phylink.c
 @@ -12,6 +12,7 @@
@@ -118,7 +113,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  #include <linux/phy.h>
  #include <linux/phy_fixed.h>
  #include <linux/phylink.h>
-@@ -63,6 +64,7 @@ struct phylink {
+@@ -63,6 +64,7 @@
  
  	/* List of available PCS */
  	struct list_head pcs_list;
@@ -126,7 +121,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  	/* What interface are supported by the current link.
  	 * Can change on removal or addition of new PCS.
-@@ -543,9 +545,13 @@ static int phylink_validate_mac_and_pcs(
+@@ -542,11 +544,15 @@
  	unsigned long capabilities;
  	int ret;
  
@@ -141,7 +136,9 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  			return PTR_ERR(pcs);
 +		}
  	/*
-@@ -571,6 +577,7 @@ static int phylink_validate_mac_and_pcs(
+ 	 * Find a PCS in available PCS list for the requested interface.
+ 	 *
+@@ -570,6 +576,7 @@
  		 * error and backtrace rather than oopsing the kernel.
  		 */
  		if (!pcs->ops) {
@@ -149,7 +146,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  			phylink_err(pl, "interface %s: uninitialised PCS\n",
  				    phy_modes(state->interface));
  			dump_stack();
-@@ -580,6 +587,7 @@ static int phylink_validate_mac_and_pcs(
+@@ -579,6 +586,7 @@
  		/* Recheck PCS to handle legacy way for .mac_select_pcs */
  		ret = phylink_validate_pcs_interface(pcs, state->interface);
  		if (ret) {
@@ -157,7 +154,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  			phylink_err(pl, "selected PCS does not support %s\n",
  				    phy_modes(state->interface));
  			return -EINVAL;
-@@ -588,8 +596,10 @@ static int phylink_validate_mac_and_pcs(
+@@ -587,8 +595,10 @@
  		/* Validate the link parameters with the PCS */
  		if (pcs->ops->pcs_validate) {
  			ret = pcs->ops->pcs_validate(pcs, supported, state);
@@ -169,16 +166,17 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  			/* Ensure the advertising mask is a subset of the
  			 * supported mask.
-@@ -599,6 +609,8 @@ static int phylink_validate_mac_and_pcs(
+@@ -597,6 +607,8 @@
+ 				     supported);
  		}
  	}
- 
-+	mutex_unlock(&pl->state_mutex);
 +
++	mutex_unlock(&pl->state_mutex);
+ 
  	/* Then validate the link parameters with the MAC */
  	if (pl->mac_ops->mac_get_caps)
- 		capabilities = pl->mac_ops->mac_get_caps(pl->config,
-@@ -995,5 +1007,8 @@ static unsigned int phylink_inband_caps(
+@@ -993,6 +1005,9 @@
+ 					 phy_interface_t interface)
  {
  	struct phylink_pcs *pcs = NULL;
 +	int ret = 0;
@@ -187,16 +185,17 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  	if (pl->mac_ops->mac_select_pcs) {
  		pcs = pl->mac_ops->mac_select_pcs(pl->config,
-@@ -1009,9 +1024,14 @@ static unsigned int phylink_inband_caps(
- 		}
+@@ -1009,9 +1024,14 @@
  	}
+ 
  	if (IS_ERR_OR_NULL(pcs))
 -		return 0;
+-
+-	return phylink_pcs_inband_caps(pcs, interface);
 +		goto exit;
 +
 +	ret = phylink_pcs_inband_caps(pcs, interface);
- 
--	return phylink_pcs_inband_caps(pcs, interface);
++
 +exit:
 +	mutex_unlock(&pl->state_mutex);
 +
@@ -204,7 +203,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  }
  
  static void phylink_pcs_poll_stop(struct phylink *pl)
-@@ -1545,7 +1565,9 @@ static void phylink_mac_initial_config(s
+@@ -1545,7 +1565,9 @@
  	phylink_apply_manual_flow(pl, &link_state);
  	if (phy)
  		mutex_lock(&phy->lock);
@@ -214,7 +213,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  	if (phy)
  		mutex_unlock(&phy->lock);
  }
-@@ -1913,6 +1935,9 @@ static int phylink_fill_available_pcs(st
+@@ -1913,6 +1935,9 @@
  	if (!pcss)
  		return -ENOMEM;
  
@@ -224,7 +223,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  	ret = config->fill_available_pcs(config, pcss, config->num_possible_pcs);
  	if (ret < 0)
  		goto out;
-@@ -1927,11 +1952,89 @@ static int phylink_fill_available_pcs(st
+@@ -1927,9 +1952,87 @@
  	}
  
  out:
@@ -233,8 +232,8 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  	kfree(pcss);
  
  	return ret;
- }
- 
++}
++
 +static void phylink_del_pcs(struct phylink *pl, struct phylink_pcs *pcs)
 +{
 +	lockdep_assert_held(&pl->state_mutex);
@@ -309,12 +308,10 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 +	phylink_run_resolve(pl);
 +
 +	return NOTIFY_OK;
-+}
-+
+ }
+ 
  /**
-  * phylink_create() - create a phylink instance
-  * @config: a pointer to the target &struct phylink_config
-@@ -2020,10 +2123,18 @@ struct phylink *phylink_create(struct ph
+@@ -2020,10 +2123,18 @@
  	__set_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state);
  	timer_setup(&pl->link_poll, phylink_fixed_poll, 0);
  
@@ -334,7 +331,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  	/* Link available PCS to phylink */
  	list_for_each_entry(pcs, &pl->pcs_list, list)
-@@ -2038,13 +2149,15 @@ struct phylink *phylink_create(struct ph
+@@ -2038,13 +2149,15 @@
  				 pl->supported_interfaces,
  				 pcs->supported_interfaces);
  
@@ -351,7 +348,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  
  	if (pl->cfg_link_an_mode == MLO_AN_FIXED) {
  		ret = phylink_parse_fixedlink(pl, fwnode);
-@@ -2063,11 +2176,17 @@ struct phylink *phylink_create(struct ph
+@@ -2063,11 +2176,17 @@
  release_link_gpio:
  	if (pl->link_gpio)
  		gpiod_put(pl->link_gpio);
@@ -370,7 +367,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  free_pl:
  	fwnode_handle_put(pl->fwnode);
  	kfree(pl);
-@@ -2092,14 +2211,22 @@ void phylink_destroy(struct phylink *pl)
+@@ -2092,13 +2211,21 @@
  	if (pl->link_gpio)
  		gpiod_put(pl->link_gpio);
  
@@ -379,23 +376,22 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 +		unregister_fwnode_pcs_notifier(&pl->fwnode_pcs_nb);
 +
  	cancel_work_sync(&pl->resolve);
- 
-+	mutex_lock(&pl->state_mutex);
 +
++	mutex_lock(&pl->state_mutex);
+ 
  	/* Remove every PCS from phylink PCS list */
  	list_for_each_entry_safe(pcs, tmp, &pl->pcs_list, list) {
  		pcs->phylink = NULL;
  		list_del(&pcs->list);
  	}
- 
-+	mutex_unlock(&pl->state_mutex);
 +
++	mutex_unlock(&pl->state_mutex);
+ 
  	fwnode_handle_put(pl->fwnode);
  
- 	kfree(pl);
 --- a/include/linux/pcs/pcs.h
 +++ b/include/linux/pcs/pcs.h
-@@ -4,8 +4,39 @@
+@@ -4,7 +4,38 @@
  
  #include <linux/phylink.h>
  
@@ -406,7 +402,7 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 +struct fwnode_pcs_provider;
 +
  #if IS_ENABLED(CONFIG_FWNODE_PCS)
- /**
++/**
 + * register_fwnode_pcs_notifier - Register a notifier block for fwnode
 + *				  PCS events
 + * @nb: pointer to the notifier block
@@ -431,14 +427,15 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 + */
 +int unregister_fwnode_pcs_notifier(struct notifier_block *nb);
 +
-+/**
+ /**
   * fwnode_pcs_get - Retrieves a PCS from a firmware node
   * @fwnode: firmware node
-  * @index: index fwnode PCS handle in firmware node
-@@ -20,6 +51,27 @@ struct phylink_pcs *fwnode_pcs_get(const
+@@ -18,6 +49,27 @@
+  */
+ struct phylink_pcs *fwnode_pcs_get(const struct fwnode_handle *fwnode,
  				   unsigned int index);
- 
- /**
++
++/**
 + * fwnode_pcs_matches_provider() - Check whether a PCS belongs to a provider
 + * @provider: PCS provider to check
 + * @fwnode: firmware node containing the PCS references
@@ -458,12 +455,10 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
 +bool fwnode_pcs_matches_provider(struct fwnode_pcs_provider *provider,
 +				 const struct fwnode_handle *fwnode,
 +				 struct phylink_pcs *pl_pcs);
-+
-+/**
+ 
+ /**
   * fwnode_phylink_pcs_count - Count PCS entries described in firmware node
-  * @fwnode: firmware node
-  *
-@@ -52,12 +104,29 @@ int fwnode_phylink_pcs_parse(struct fwno
+@@ -52,10 +104,27 @@
  			     struct phylink_pcs **available_pcs,
  			     unsigned int num_pcs);
  #else
@@ -481,15 +476,13 @@ Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
  						 unsigned int index)
  {
  	return ERR_PTR(-ENOENT);
- }
- 
++}
++
 +static inline bool fwnode_pcs_matches_provider(struct fwnode_pcs_provider *provider,
 +					       const struct fwnode_handle *fwnode,
 +					       struct phylink_pcs *pl_pcs)
 +{
 +	return false;
-+}
-+
+ }
+ 
  static inline unsigned int fwnode_phylink_pcs_count(struct fwnode_handle *fwnode)
- {
- 	return 0;

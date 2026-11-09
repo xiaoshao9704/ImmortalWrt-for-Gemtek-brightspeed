@@ -33,12 +33,15 @@ TXPLL reset, or TX FIR default.
 
 Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 Assisted-by: Codex:GPT-5.6-sol
+---
 --- a/drivers/net/phy/realtek/phy_patch_rtl826x.c
 +++ b/drivers/net/phy/realtek/phy_patch_rtl826x.c
-@@ -117,6 +117,36 @@
- 	return rtl826x_phy_patch_sds_set(phydev, sds_page, sds_reg, (ret & ~mask) | data);
- }
+@@ -115,6 +115,36 @@
+ 	}
  
+ 	return rtl826x_phy_patch_sds_set(phydev, sds_page, sds_reg, (ret & ~mask) | data);
++}
++
 +int rtl826x_phy_patch_rtk_serdes(struct phy_device *phydev)
 +{
 +	struct rtl826x_priv *priv = phydev->priv;
@@ -67,23 +70,42 @@ Assisted-by: Codex:GPT-5.6-sol
 +		return ret;
 +
 +	return 0;
-+}
-+
+ }
+ 
  static int rtl826x_phy_patch_op(struct phy_device *phydev, const struct rtlgen_hwpatch *patch)
- {
- 	u32 mask = GENMASK(patch->msb, patch->lsb);
 --- a/drivers/net/phy/realtek/phy_patch_rtl826x.h
 +++ b/drivers/net/phy/realtek/phy_patch_rtl826x.h
-@@ -13,5 +13,6 @@
- 			      u32 sds_reg, u32 data);
+@@ -11,5 +11,6 @@
+ 
  int rtl8261n_phy_patch_db_init(struct phy_device *phydev);
  int rtl8264b_phy_patch_db_init(struct phy_device *phydev);
 +int rtl826x_phy_patch_rtk_serdes(struct phy_device *phydev);
  
  #endif
+--- a/drivers/net/phy/realtek/realtek.h
++++ b/drivers/net/phy/realtek/realtek.h
+@@ -8,8 +8,18 @@
+ #include "phy_patch.h"
+ #include "phy_patch_rtl826x.h"
+ 
++enum rtl826x_rtk_serdes_state {
++	RTL826X_RTK_SERDES_IDLE,
++	RTL826X_RTK_SERDES_PULSE,
++	RTL826X_RTK_SERDES_RELEASE,
++	RTL826X_RTK_SERDES_CHECK_CARRIER,
++};
++
+ struct rtl826x_priv {
+ 	struct rtlgen_phy_patch_db *patch;
++	enum rtl826x_rtk_serdes_state rtk_serdes_state;
++	u32 rtk_serdes_pulse_count;
++	u8 rtk_serdes_carrier_polls;
+ 	bool enable_pma_low_power:1;
+ 	bool patch_rtk_serdes:1;
+ 	struct phy_device *phydev;
 --- a/drivers/net/phy/realtek/realtek_main.c
 +++ b/drivers/net/phy/realtek/realtek_main.c
-@@ -24,6 +24,9 @@
+@@ -25,6 +25,9 @@
  
  #include "realtek.h"
  
@@ -93,7 +115,7 @@ Assisted-by: Codex:GPT-5.6-sol
  #define RTL8201F_IER				0x13
  
  #define RTL8201F_ISR				0x1e
-@@ -3235,6 +3238,8 @@
+@@ -3353,6 +3356,8 @@
  	priv->enable_pma_low_power = device_property_read_bool(dev, "realtek,enable-pma-low-power");
  	priv->patch_rtk_serdes =
  		device_property_read_bool(dev, "realtek,patch-rtk-serdes");
@@ -102,7 +124,7 @@ Assisted-by: Codex:GPT-5.6-sol
  	priv->phydev = phydev;
  	phydev->priv = priv;
  
-@@ -3425,11 +3430,17 @@
+@@ -3532,11 +3537,17 @@
  
  static int rtl826x_config_aneg(struct phy_device *phydev)
  {
@@ -120,7 +142,7 @@ Assisted-by: Codex:GPT-5.6-sol
  	if (phydev->autoneg == AUTONEG_DISABLE)
  		return genphy_c45_pma_setup_forced(phydev);
  
-@@ -3459,8 +3470,33 @@
+@@ -3566,8 +3577,33 @@
  	return genphy_c45_check_and_restart_aneg(phydev, changed);
  }
  
@@ -154,7 +176,7 @@ Assisted-by: Codex:GPT-5.6-sol
  	int status;
  	int ret;
  
-@@ -3491,7 +3527,96 @@
+@@ -3598,7 +3634,96 @@
  			return ret;
  	}
  
@@ -252,24 +274,3 @@ Assisted-by: Codex:GPT-5.6-sol
  }
  
  static int rtl826x_config_intr(struct phy_device *phydev)
---- a/drivers/net/phy/realtek/realtek.h
-+++ b/drivers/net/phy/realtek/realtek.h
-@@ -8,8 +8,18 @@
- #include "phy_patch.h"
- #include "phy_patch_rtl826x.h"
- 
-+enum rtl826x_rtk_serdes_state {
-+	RTL826X_RTK_SERDES_IDLE,
-+	RTL826X_RTK_SERDES_PULSE,
-+	RTL826X_RTK_SERDES_RELEASE,
-+	RTL826X_RTK_SERDES_CHECK_CARRIER,
-+};
-+
- struct rtl826x_priv {
- 	struct rtlgen_phy_patch_db *patch;
-+	enum rtl826x_rtk_serdes_state rtk_serdes_state;
-+	u32 rtk_serdes_pulse_count;
-+	u8 rtk_serdes_carrier_polls;
- 	bool enable_pma_low_power:1;
- 	bool patch_rtk_serdes:1;
- 	struct phy_device *phydev;
