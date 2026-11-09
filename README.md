@@ -1,317 +1,154 @@
-<img src="https://avatars.githubusercontent.com/u/53193414?s=200&v=4" alt="logo" width="200" height="200" align="right">
+# XG2010G firmware — ponwrt base
 
-# ImmortalWrt-for-Gemtek-brightspeed XR1710G & XG2010G
+这是 `xiaoshao9704/ImmortalWrt-for-Gemtek-brightspeed` 的 XG2010G 固件分支。
+主上游改为 [pbs05/ponwrt](https://github.com/pbs05/ponwrt)，本次一次性合并
+`d9dd3a49f7`，之后从该上游同步。Linux 基线为 **6.18.60**。
+naoki66 的公开代码只保留下文列出的 XG2010G 必需差异，不再合并其 master。
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/naoki66/ImmortalWrt-for-Gemtek-brightspeed/build-firmware.yml?branch=master&label=Build)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed/actions/workflows/build-firmware.yml)
-[![Sync Status](https://img.shields.io/github/actions/workflow/status/naoki66/ImmortalWrt-for-Gemtek-brightspeed/sync-upstream.yml?branch=master&label=Sync)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed/actions/workflows/sync-upstream.yml)
-[![Upstream](https://img.shields.io/badge/upstream-immortalwrt%403e246256ce-blue)](https://github.com/immortalwrt/immortalwrt)
-[![Synced](https://img.shields.io/badge/synced-2026--09--14%20merged-brightgreen)](#)
-[![Kernel](https://img.shields.io/badge/kernel-6.18.44-red)](https://www.kernel.org/)
-[![SoC](https://img.shields.io/badge/SoC-Airoha%20AN7581GT-orange)]()
-[![License](https://img.shields.io/badge/license-GPL--2.0-green)](https://spdx.org/licenses/GPL-2.0-only.html)
+**XR1710G 已停止支持**：配置、专用 DTS、升级分支和 CI 入口已移除。
+ponwrt 自己支持的其他设备仍保留其上游代码；本仓库 CI 只提供以下两种 XG2010G 配置。
 
-基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) 为 Brightspeed/Gemtek
-XR1710G 与 XG2010G 设备维护的 Airoha AN7581 固件项目。
+| 设备 | 构建配置 | 镜像 profile |
+| --- | --- | --- |
+| XG2010G，1 GiB RAM | [2010.config](2010.config) | `gemtek_xg2010g-ubi` |
+| XG2010G，2 GiB RAM | [2010-2g.config](2010-2g.config) | `gemtek_xg2010g-2g-ubi` |
 
-项目的重要功能、稳定性和补丁维护记录见 [更新日志](CHANGELOG.md)。
+默认 LAN 为 `192.168.1.1`，用户名 `root`，初始密码为空，LuCI 默认中文。
+本机 PPPoE 和 TAG 桥接是主要使用方式；驱动代码覆盖 GPON、XG-PON、XGS-PON 和 EPON，
+不同运营商和光模块组合仍需实机验证。
 
-当前维护两个相互隔离的硬件配置：
+本次迁移状态、逐文件冲突处理、配置差异和验证范围见
+[迁移审查报告](docs/ponwrt-base-migration.md)。目前尚未运行完整固件 CI 或刷机。
 
-- **XR1710G**：Brightspeed 10G Wi-Fi 7 路由器，使用 `1710.config`，包含 MT7996 无线、NPU 和 RTL8261BE 以太网支持。
-- **XG2010G**：Brightspeed 10G XG(S)-PON/XE-PON 网关，使用 `2010.config`，PON 驱动与用户态基于 [pbs05/openwrt-pon-drivers](https://github.com/pbs05/openwrt-pon-drivers) ，并保留 NPU、RTL8261BE 以太网和语音相关支持。另有 2 GiB DRAM 变体 `2010-2g.config`。
+## 源码和保留的功能
 
-## 支持设备
+| 来源 | 当前内容 |
+| --- | --- |
+| pbs05/ponwrt `d9dd3a49f7` | 新的 ImmortalWrt 基底、generic bridge flowtable、Airoha 网络/PON/PCS/LRO、用户空间和 libffi |
+| [PON 驱动 fork](https://github.com/xiaoshao9704/openwrt-pon-drivers/tree/xg2010g-merged) `fec6b02eae6ccca8e8313d171102670183224b02` | naoki66/pbs05 合并版，`airoha-xpon` r71，包含 EPON 未 prepare 时重新准备 TX 的修复 |
+| [naoki66/OpenWrt_ONU_CONFIG](https://github.com/naoki66/OpenWrt_ONU_CONFIG) `3cb13560459f1d51136dac662baa1f399028b2b4` | 公开 ONU r26，本机拨号、桥接和 IPTV 用户空间；以 `onu_config` feed 取代 `pon_userspace` |
+| naoki66 公开固件源码 | XG2010G UBI/升级保护、1.4 GHz OPP、10G/2.5G PHY/PCS、ToD、语音、改写后的 PPPoE MTU 和 FDB 漫游修复 |
+| 本 fork | fw4 加载失败传播及能力探测、PPP syncdial/PR #638、UPnP counter、feed 补丁机制、distfeeds、中文 UI、CI 和原有回归测试 |
 
-| 设备 | 构建配置 | 当前定位 | 设备树/镜像 |
-|------|----------|----------|------------|
-| Brightspeed/Gemtek XR1710G（原版 U-Boot 分区） | [`1710.config`](1710.config) | Wi-Fi 7 路由器固件 | [`an7581-xr1710g.dts`](target/linux/airoha/dts/an7581-xr1710g.dts) |
-| Brightspeed/Gemtek XR1710G（OpenWrt U-Boot UBI 布局） | [`1710.config`](1710.config) | 参考 XG2010G 的整盘 UBI 引导方案 | [`an7581-gemtek-xr1710g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xr1710g-ubi.dts) |
-| Brightspeed/Gemtek XG2010G | [`2010.config`](2010.config) | XG(S)-PON 网关移植基线 | [`an7581-gemtek-xg2010g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xg2010g-ubi.dts) |
-| Brightspeed/Gemtek XG2010G（2 GiB） | [`2010-2g.config`](2010-2g.config) | XG(S)-PON 网关，2 GiB DRAM 变体 | [`an7581-gemtek-xg2010g-2g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xg2010g-2g-ubi.dts) |
+保留两份配置原来选中的 IPTV、Argon/配置页面、package-manager、NPU、WireGuard、
+TUN、CAKE、BBR、cryptodev、fullcone、PPP multilink、shellsync、语音和诊断工具。
+2 GiB 配置原本还选中了 Passwall 和 Lucky；Lucky 已从 ponwrt 删除，故保留 naoki66
+公开源码中的本地包，避免功能消失。没有新增 BBRv3；如以后需要，应作为单独变更评估。
 
-### XR1710G
+额外 feed 清理尚待确认：`2010.config` 有一行孤立的 `luci-i18n-pushbot-zh-cn=y`，
+但主包未启用。按“不删除已选包”的约束，easytier、openwrt_bandix、luci_app_bandix、
+helloworld、pushbot 五项目前都暂未删除。前四项在这两份配置中没有独占的有效已选包；
+helloworld 的重叠包和 Passwall 均由官方 feeds 提供。
 
-默认管理地址：http://192.168.50.1 或 http://immortalwrt.lan，用户名：**root**，密码：*无*。
+所有 feed 版本固定在 [feeds.conf.default](feeds.conf.default)。自定义 feeds 仅用于构建，
+不会出现在设备的官方 distfeeds URL 中。ONU 修改只通过 `patches/feeds/onu_config/`
+应用；原 `100-probe-bridge-nft-fallback.patch` 内容保持不变。
+未从任何已发布固件提取代码，也未加入第三方 airoha-manager。
 
-首次启动的无线网络为 `ImmortalWrt-2G`、`ImmortalWrt-5G` 和 `ImmortalWrt-6G`，统一初始密码为 `12345678`。2.4GHz 使用 WPA2，5GHz 使用 WPA2/WPA3 混合模式，6GHz 使用 WPA3；首次登录后请及时修改管理密码和无线密码。
+## CPU 默认策略
 
-| 项目 | 参数 |
-|------|------|
-| **SoC** | Airoha AN7581GT（1.3GHz 4 核 CPU + 8 核 NPU） |
-| **内存** | 2GB |
-| **闪存** | 512MB |
-| **网口** | 2×10G RTL8261BE + 2×1G AN7581 |
-| **无线** | MediaTek MT7996AV，2.4GHz/5GHz/6GHz 三频 Wi-Fi 7 |
-| **PWM 风扇** | 新唐 NCT7802 |
-| **电源规格** | 12V 5A |
+两份原始 XG2010G DTS 均保留 1.25、1.30、1.35、1.40 GHz OPP 及对应 SMCC 档位，
+并启用 `airoha,force-direct-pll`。早期启动参数仍为
+`cpufreq.default_governor=powersave`。
 
-#### 无线局域网（MT7996AV BE19000）
+首次应用板级 CPU 默认设置时，策略为 **ondemand，最高 1.4 GHz**，并非锁定在 1.4 GHz。
+已有明确保存的 CPU 策略会被保留；uci-defaults 文件名
+`11-xr1710g-cpufreq-defaults` 不变，以免升级后重复执行。
+1.4 GHz 的温度、供电和长期稳定性需要在实际设备上检查。
 
-| 频段 | 芯片 | 规格 | 最高速率 |
-|------|------|------|----------|
-| WLAN1 | MT7976GN | 2.4GHz 4×4 (Tx/Rx) 4096 QAM 40 MHz | 1376 Mbps |
-| WLAN2 | MT7977BN | 5GHz 4×4 (Tx/Rx) 4096 QAM 160 MHz | 5.76 Gbps |
-| WLAN3 | MT7977AN | 6GHz 4×5 (Tx/Rx) 4096 QAM 320 MHz (backhaul) | 10 Gbps |
+## 后续同步
 
-
-### XG2010G
-
-XG2010G 与 XR1710G 同属 Airoha AN7581 平台，但硬件布局和软件包集合不同，不能互刷固件。
-
-默认管理地址：http://192.168.1.1 或 http://immortalwrt.lan，用户名：**root**，密码：*无*。
-
-| 项目 | 参数 |
-|------|------|
-| **SoC** | Airoha AN7581 / EN7581 |
-| **内存** | 1GB DDR4 |
-| **闪存** | 512MB SPI-NAND（W25N04K 基线） |
-| **以太网** | 2×10G RTL8261N、1×2.5G EN8811H，以及板载 1G 交换端口 |
-| **光接入** | EN7572 xPON 前端；原厂定位为 XG(S)-PON 网关 |
-| **无线** | 本项目的 XG2010G 配置不启用无线驱动和 MT7996 软件包 |
-
-- 使用 Airoha `an7581` 目标和独立的 `gemtek_xg2010g-ubi` 镜像配置。
-- PON 驱动和用户态依赖由 [`feeds.conf.default`](feeds.conf.default) 中的 `pon_drivers`、`pon_userspace` feed 获取，使用 `kmod-airoha-en7572`、`kmod-airoha-xpon`、`airoha-ponctl`、`airoha-pond` 和 `luci-app-onu` 新栈；IPTV 配置已并入 `luci-app-onu` 的 ONU 菜单，不再选择独立的 `luci-app-iptv`。
-- `pon_userspace` feed 和 `luci-app-onu` 只在 `2010.config` 启用；`1710.config` 明确禁用该 feed 和 ONU LuCI 软件包。
-- 桥接上网的 nft 先探测含 flowtable 的完整表，`nft -c` 失败再降级为 PPPoE/IPoE 过滤。说明见 [docs/xg2010g-onu-bridge-nft-fallback.md](docs/xg2010g-onu-bridge-nft-fallback.md)。
-- `2010.config` 只选择 XG2010G 的 PON、TOD 和 EN7581 PCM-SPI 相关软件包，并通过 [profile isolation 检查](scripts/check-gemtek-profile-isolation.sh) 拒绝混入 XR1710G 的 Wi-Fi 软件包。
-- 设备树禁用当前没有足够硬件证据的 PCIe、USB 和 eMMC，保留 EN7581 xPON、PON PHY、TOD、I2C 和 PCM-SPI 相关节点。
-- 语音控制路径按原厂 5.4 固件的 `slic3_silicon`/`pcm1`/`spi` 模块序列恢复：XG2010G 设备树启用 EN7581 AFE，PCM 控制器初始化为 2 路 8-bit timeslot，并提供 25 帧 TX/RX DMA 环和 `/dev/pcm1` 20 ms 帧读写口。
-- PCM-SPI 节点提供 Si32192 身份探测、片选状态、PCM/SLIC 原始寄存器读写、2 路 FXS 的 linefeed 状态和 hook 状态读取（`identity`、`rescan`、`chip_select`、`raw_register`、`pcm_register`、`line_state`、`hook_state`）。
-- 镜像使用 XG2010G 专用 UBI 布局：`bl2` 占 NAND 首个 `0x20000` 擦除块，
-  `ubi` 从 `0x00020000` 延伸到 NAND 末尾。`fip`、`ubootenv`、`ubootenv2`、
-  `factory`、`fit` 和 `rootfs_data` 都是该 UBI 内的 volume；刷写固件时只删除并
-  按新镜像大小重建动态 `fit`/`rootfs_data`，保留 U-Boot、环境和校准数据卷。
-- XG2010G 的 FIT 构建上限为 64 MiB，对应当前 U-Boot 从 `0x90000000` 上传、
-  从 `0x94000000` 回读校验的双缓冲边界，并非某次已安装 `fit` 卷的当前大小。
-
-#### 刷写和验证边界
-
-> [!WARNING]
-> XG2010G 刷写前必须通过串口确认当前启动状态，并完成原厂 NAND/关键分区的只读备份和校验。只允许针对匹配的 `ubi` 分区升级；必须保留 `bootloader`、`uenv`、`dsd` 和 `reserved_bmt`。不要将 XR1710G 镜像或分区表用于 XG2010G。
-
-
-## XR1710G 固件特性
-
-### 核心定制
-
-- 保留原版 XR1710G 设备树 [an7581-xr1710g.dts](target/linux/airoha/dts/an7581-xr1710g.dts)，继续适配原厂/旧 U-Boot 分区布局。
-- 另增 [an7581-gemtek-xr1710g-ubi.dts](target/linux/airoha/dts/an7581-gemtek-xr1710g-ubi.dts)，适配 [pbs05/uboot-an758x](https://github.com/pbs05/uboot-an758x) 的 XG2010G 式引导方案，并保留 XR1710G 的 PCIe 3.0 x2、MT7996 和 RTL8261BE 硬件定义。这里只复用引导架构，不能把 XG2010G 的 U-Boot 二进制直接刷入 XR1710G。
-- `1710.config` 使用 multi-profile，一次构建两份固件：`gemtek_xr1710g`（原版 U-Boot/分区）和 `gemtek_xr1710g-ubi`（OpenWrt U-Boot UBI 布局）。两个布局不能互刷；部分旧固件的板型名也带 `-ubi`，升级前请按下文核对实际布局。
-- OpenWrt U-Boot UBI 布局中，`bl2` 为 `0x00000000 + 0x00020000`，`ubi` 从 `0x00020000` 起并以零长度延伸到 NAND 末尾。U-Boot Web Recovery 重建 UBI 时创建空的静态 `factory` 卷；首次启动 Linux 前，必须把原厂 `dsd` 分区去除 OOB 后的完整 2 MiB 主数据恢复到该卷。
-- `factory_storage` 与旧写法 `ubi_factory` 只是设备树 phandle 标签，不是两个卷；运行时都指向唯一的 UBI 卷名 `factory`。XR1710G 的完整 DSD 中，`0x006c/0x0086` 是 17 字节文本 WAN/LAN MAC，MT7996 EEPROM/校准位于 `0x5000`、长度 `0x1e00`。不要恢复旧布局中“EEPROM 放在卷首、原始 MAC 放在 `0x5000/0x6000`”的重排 factory 镜像。
-- `luci-app-airoha-factory` 会按板型选择旧布局 raw MAC 写入或 DSD 布局整卷读改写；UBI `factory` 卷回写需要 `ubiupdatevol`。
-- 关键内核与网络补丁（完整列表见 [target/linux/airoha/patches-6.18/](target/linux/airoha/patches-6.18/) 和 [target/linux/generic/pending-6.18/](target/linux/generic/pending-6.18/)）：
-  - `743`、`744`、`747`：XR1710G/XG2010G 共享的 RTL8261BE/RTL8261N SerDes 调优、协商后重试和 USXGMII in-band 配置。
-  - `182-v7.4`：扩大 Airoha 小型 RX ring，缓解 PPPoE 等突发 CPU 流量导致的 descriptor 耗尽。
-  - `221-01`：允许 Airoha 平台启用 CPU PM Domain。
-  - `675-02~05`：nft_flow_offload 桥接、WDMA 与 VLAN-aware bridge/PVID 映射。
-  - `910-02`、`912`、`913`：USB/PCIe 时钟、PCIe 3.0 x2 链路与复位修复。
-  - `181`、`924`、`926`：NPU 异常恢复、固件加载、coherent mailbox DMA 与 mailbox 等待时间限制。
-  - `915-01`、`916-02`、`9990`、`9993`、`9999-11`：PPE/flowtable 硬件卸载、WLAN 流绑定、VLAN ingress 与 XFRM 流支持。
-  - `920-xg2010g-pon-*`、`607-cpufreq`、`990-01`：XG2010G PON 兼容层、Airoha 网络、MTU、CPU 频率与桥接 FDB 漫游修复；`920-xg2010g-pon-*` 在 XR1710G 配置中保持关闭。
-- 无线栈补丁：
-  - [mt76 patches](package/kernel/mt76/patches/) 中的 `001`（mt7996 PS sync TLV/MLO 稳定性）与 `9993`（operating-mode rate control）。
-  - [mac80211 patch](package/kernel/mac80211/patches/subsys/411-mac80211-export-link-sta-capability-limits.patch) 与 [hostapd patches](package/network/services/hostapd/patches/)（6GHz、EHT、radio mask 及多 VAP 稳定性）。
-- 启动与设备定制：`03_wifi_defaults`（SSID、加密方式、US 区域码）、`03_wireless`（射频参数）、`18-xr1710g-firewall-defaults`（默认软件/硬件 flow offload）、`99-ppe-reload`（无线接口创建后重载防火墙）、`packet-steering.sh`（Wi-Fi worker/CPU 亲和性）、风扇服务、升级平台脚本，以及由 `airoha` feed 提供的附属 LuCI 应用。
-
-### 网络与无线默认行为
-
-- 默认 LAN 地址由各设备构建配置的 `CONFIG_TARGET_PREINIT_IP` 决定：XR1710G 为 `192.168.50.1`，XG2010G 为 `192.168.1.1`；IPv6 使用 SLAAC/EUI-64，关闭 DHCPv6/NDP 与 RA DNS/附加标志，减少国内网络环境下的兼容性问题。
-- 默认开启 firewall4 软件 flow offload 与硬件 flow offload；VLAN 标签卸载、PPPoE 透传卸载和 AP 模式加速可在 NPU 页面按需启用，并由 FlowSense 展示运行状态。
-- 三个无线射频默认启用：2.4GHz 为 HE20/自动信道/28dBm，5GHz 为 EHT160/信道 36/30dBm，6GHz 为 EHT320/信道 37/30dBm。
-- FlowSense 提供 Router/AP 模式、VLAN 标签/PPPoE 透传/AP 模式卸载状态与自定义 Ping 延迟检测；NPU 页面提供 PPE/Frame Engine 与 CPU 频率状态；风扇页面提供实时温度、RPM/PWM 曲线与自定义曲线。
-
-### 预装 LuCI 应用（25 个，含中文界面）
-
-#### 设备专属与 Airoha feed
-
-| 应用 | 来源 | 功能 |
-|------|------|------|
-| `luci-app-airoha-npu` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) Airoha feed | SoC/NPU 状态与加速开关 |
-| `luci-app-airoha-fancontrol` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) | 风扇速度/温度控制与曲线 |
-| `luci-app-airoha-factory` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) | 原厂序列号、MAC/BSSID 与校准信息工具 |
-| `luci-app-airoha-recovery` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) | 一键重启进入 U-Boot HTTP Recovery（一次性触发） |
-| `luci-app-mesh-conf` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) | Mesh 与有线回程配置 |
-| `luci-app-netmode` | [`naoki66/luci-app-airoha`](https://github.com/naoki66/luci-app-airoha) | Router/AP/有线回程网络模式控制 |
-| `luci-app-lucky` | [sirpdboy/luci-app-lucky](https://github.com/sirpdboy/luci-app-lucky) | Lucky（DDNS/反代/端口转发） |
-
-#### 网络与远程接入
-
-| 应用 | 功能 |
-|------|------|
-| `luci-app-zerotier` | ZeroTier 虚拟局域网 |
-| `luci-app-ddns-go` | DDNS-Go 动态域名（支持阿里云/Cloudflare/DNSPod） |
-| `luci-app-ddns` | 传统 DDNS 脚本 |
-| `luci-app-upnp` | UPnP 自动端口转发 |
-| `luci-app-firewall` | 防火墙（firewall4/nftables） |
-| `luci-app-arpbind` | IP/MAC 绑定 |
-| `luci-app-mlo` | MLO（Wi-Fi 7 多链路操作） |
-| `luci-app-msd_lite` | MSD Lite 组播播放 |
-
-#### 系统与自动化
-
-| 应用 | 功能 |
-|------|------|
-| `luci-app-package-manager` | APK 包管理器 |
-| `luci-app-ttyd` | Web 终端 |
-| `luci-app-autoreboot` | 定时重启 |
-| `luci-app-timewol` | 定时网络唤醒 |
-| `luci-app-wifischedule` | Wi-Fi 定时开关 |
-| `luci-app-watchcat` | 网络看门狗 |
-| `luci-app-wol` | 网络唤醒 |
-| `luci-app-vlmcsd` | KMS 激活服务 |
-| `luci-app-rtp2httpd` | RTP 转 HTTP |
-| `luci-app-udpxy` | UDP 组播代理 |
-| `luci-app-wechatpush` | 微信推送通知 |
-| `luci-app-wifihistory` | WiFi 历史记录 |
-
-> 为控制固件体积，当前不预装 `luci-app-openclash`、`luci-app-passwall`、`luci-app-adguardhome` 和 `luci-app-smartdns`；SmartDNS 核心及独立 UI 仍保留。
-
-### 主要系统包
-
-**网络核心**
-- `dnsmasq-full`（完整版 DNS/DHCP）
-- `firewall4` + `nftables-json`（nftables 防火墙）
-- `wpad-mbedtls`（WPA2/WPA3、EHT/MLO 支持）
-- `odhcp6c` / `odhcpd-ipv6only`（IPv6）
-- `ppp` / `ppp-mod-pppoe`（PPPoE）
-- `smartdns` + `smartdns-ui`（DNS 加速/分流）
-- `wireguard-tools` + `luci-proto-wireguard` + `rpcd-mod-wireguard`（WireGuard）
-
-**内核模块（kmod）**
-- `kmod-mt7996-firmware` / `kmod-mt7996e`（MT7996 Wi-Fi 7 驱动）
-- `airoha-en7581-mt7996-npu-firmware`（Airoha NPU 固件）
-- `kmod-crypto-hw-eip93`（硬件加密加速）
-- `kmod-nft-offload`（硬件流量卸载）
-- `kmod-br-netfilter` / `kmod-tcp-bbr`（桥接 Netfilter / BBR 拥塞控制）
-- `kmod-wireguard`（WireGuard 内核支持）
-- `kmod-hwmon-nct7802`（NCT7802 温度传感器）
-- `kmod-airoha-i2c` / `kmod-leds-gpio` / `kmod-gpio-button-hotplug`
-- `kmod-phy-realtek` / `kmod-mt76-connac` / `kmod-mt76-core`
-- `rtl826x-firmware`（RTL8261BE PHY 固件）
-
-**系统工具**
-- `bash` / `coreutils` / `curl` / `ip-full`
-- `ethtool-full` / `pciutils` / `uboot-envtools`
-- `luci-theme-argon` + `luci-theme-bootstrap`
-- `luci-theme-glass`（仅 XR1710G 选择；由 `feeds.conf.default` 的 `glass` feed 从上游仓库安装，执行 `./scripts/feeds update glass && ./scripts/feeds install luci-theme-glass` 可更新）
-- `default-settings-chn`（中文默认设置）
-
-**代理与网络核心**
-- `xray-core` / `simple-obfs-client`
-- `chinadns-ng` / `geoview` / `dns2socks` / `microsocks` / `ipt2socks`
-
-## GitHub Actions 工作流
-
-| 工作流 | 触发方式 | 功能 |
-|--------|---------|------|
-| [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 (workflow_dispatch)；推送 `v*` tag | 构建固件；tag 推送用该 tag 发布 Release |
-| [sync-upstream.yml](.github/workflows/sync-upstream.yml) | 每 3 天定时 + 手动 | 同步 ImmortalWrt 上游 |
-
-**构建配置**：仓库根目录的 [1710.config](1710.config)、[2010.config](2010.config) 和 [2010-2g.config](2010-2g.config) 分别对应 XR1710G、XG2010G（1 GiB）与 XG2010G（2 GiB）。`1710.config` 使用 multi-profile 一次构建两个 XR1710G 固件：原版 U-Boot 分区和 OpenWrt U-Boot UBI 布局；手动触发默认使用 `1710.config`，也可以选择 `2010.config` 或 `2010-2g.config`。推送 `v*` tag（例如 `git tag v20261026-5b3d606 && git push origin v20261026-5b3d606`）会构建并发布到该 tag：tag 名含 `2g` 用 `2010-2g.config`，含 `1710` 用 `1710.config`，否则用 `2010.config`。构建流程会执行 `cp <config> .config && bash scripts/set-build-version.sh .config && make defconfig`。
-构建时会通过 [scripts/set-build-version.sh](scripts/set-build-version.sh) 写入 LuCI 可见的构建日期和 commit hash。
-文件名只保留 `日期-本机commit`（较短），完整的 `日期-本机commit-上游commit` 写在 `CONFIG_VERSION_CODE`，
-可在 LuCI 状态页与 `/etc/openwrt_release` 中查看；需要把 revision 也拼进文件名时设
-`VERSION_CODE_FILENAMES=y bash scripts/set-build-version.sh .config`。
-
-**Release 格式**：
-- 手动发布 Tag：`YYYYMMDD-<short-hash>`（`release` / `prerelease` / `none`）
-- Tag 推送：沿用已推送的 `v*` tag，不另建 tag。名称仍为 `YYYYMMDD - Gemtek <XR1710G|XG2010G|XG2010G-2G> Build (<short-hash>)`。tag 名含 `rc` / `beta` / `pre` 时标为 prerelease，否则为正式 Release。
-
-## 下载
-
-- [Releases 页面](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed/releases)
-- XR1710G 原版分区固件：`immortalwrt-naoki66-YYYYMMDD-<repo-hash>-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb`
-- XR1710G OpenWrt U-Boot UBI 布局固件：`immortalwrt-naoki66-YYYYMMDD-<repo-hash>-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb`
-- XG2010G 固件文件：`immortalwrt-naoki66-YYYYMMDD-<repo-hash>-airoha-an7581-gemtek_xg2010g-ubi-squashfs-sysupgrade.itb`
-- 升级方法：LuCI → 系统 → 备份/升级 → 刷写固件
-
-### 升级注意事项
-
-> [!WARNING]
-> LuCI 中的“保留配置”不会保留额外安装的软件包。升级前请备份配置并记录已安装的软件包；升级后需要
-> 重新安装 OpenClash、PassWall、AdGuard Home 等非预装组件。请使用与新固件匹配的软件包，不要恢复
-> 旧固件的 `kmod-*` 内核模块。
-
-#### XR1710G 布局与旧版板型名
-
-当前的两个 XR1710G 镜像使用不同的引导、NAND 和 `factory` 数据布局，不能互刷：
-
-| 布局 | 当前镜像 profile | 设备树中的分区特征 |
-|------|------------------|--------------------|
-| 原版 U-Boot / 旧布局 | `gemtek_xr1710g` | `vendor` 从 `0x00000000` 开始、大小 `0x00600000`；`chainloader` 从 `0x00600000` 开始；`ubi` 从 `0x00700000` 开始 |
-| OpenWrt U-Boot / UBI 布局 | `gemtek_xr1710g-ubi` | `bl2` 从 `0x00000000` 开始、大小 `0x00020000`；`ubi` 从 `0x00020000` 开始；`factory` 是完整的 2 MiB DSD 主数据 |
-
-部分较早的旧布局固件报告的板型名是 `gemtek,xr1710g-ubi`，与当前 **新 UBI 布局**的板型名相同。
-因此不能仅凭板型名、镜像文件名中的 `-ubi` 或校验通过就判断布局。可先在路由器上只读查看板型和
-MTD 分区（`offset`、`size` 为十进制字节数）：
+只从 ponwrt 合并共同基底。首次在新 clone 中配置 remote：
 
 ```sh
-cat /tmp/sysinfo/board_name
-cat /proc/mtd
-for mtd in /sys/class/mtd/mtd[0-9]*; do
-    [ -r "$mtd/name" ] || continue
-    printf '%s offset=%s size=%s\n' "$(cat "$mtd/name")" \
-        "$(cat "$mtd/offset")" "$(cat "$mtd/size")"
-done
+git remote add ponwrt https://github.com/pbs05/ponwrt.git
+git fetch ponwrt master
+git merge ponwrt/master
 ```
 
-这些信息反映当前内核识别的布局，还需与设备的实际引导方式和已验证备份相互核对；如果结果不明确，
-不要刷写。备份配置及引导、环境和校准数据，并按具体 release 的说明选择对应布局的镜像。
-刷写前用 `sysupgrade -T <镜像文件>` 检查；该检查由**当前运行的固件**执行，不能代替布局核验。
-如果旧布局设备的旧板型名被当前原版分区镜像拒绝，不要用 `-F` 强制升级或改刷新 UBI 布局镜像；
-应等待针对该旧版板型和布局提供的明确迁移方案。
+每次合并后重新检查保留补丁和两份配置；自动同步模板仍为 `.disabled`，没有启用定时合并。
 
-## 本地构建（可选）
+## 构建
 
-```bash
-git clone https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed.git
-cd ImmortalWrt-for-Gemtek-brightspeed
+```sh
 ./scripts/feeds update -a
 ./scripts/feeds install -a
-bash scripts/fix-stale-golang-host.sh
-cp 1710.config .config
+FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+cp 2010.config .config                 # 2 GiB 改用 2010-2g.config
 bash scripts/set-build-version.sh .config
 make defconfig
-make -j$(nproc) world 2>&1 | tee build.log
-bash scripts/summarize-build-errors.sh build.log
+bash scripts/check-distfeeds.sh
+bash scripts/check-gemtek-profile-isolation.sh --config .config
+make download -j8
+make -j"$(nproc)"
 ```
 
-构建环境要求：GNU/Linux 系统（Debian 11+ 推荐），AMD64 架构，至少 4GB RAM 和 25GB 可用磁盘空间。详细依赖请参考 [ImmortalWrt 官方文档](https://openwrt.org/docs/guide-developer/build-system/install-buildsystem)。
+[GitHub Actions](.github/workflows/build-firmware.yml) 默认构建 `2010.config`；
+手动构建使用 `release_type=none` 可只保留构建产物。
+迁移后须分别运行两份配置。工作流会检查 profile 隔离，并从实际编译产物确认：
+`nf-flowtable-7`、r71 xPON manifest、1.4 GHz/SMCC DTB、PPPoE frame-size 源码及对象。
+`ponwrt-verification/` 会随固件上传生成的配置、反汇编和实际包名列表。
 
-## 致谢
+## 升级
 
-### 上游固件
-- [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) - ImmortalWrt 主项目
-- [immortalwrt/luci](https://github.com/immortalwrt/luci) - LuCI Web 界面
-- [immortalwrt/packages](https://github.com/immortalwrt/packages) - 社区软件包仓库
-- [openwrt/routing](https://github.com/openwrt/routing) - OpenWrt 路由相关包
-- [openwrt/mt76](https://github.com/openwrt/mt76) - MediaTek WiFi 驱动
+这两个 profile 都保留 `DEVICE_COMPAT_VERSION := 2.0`、原有兼容别名和检查信息，
+不同时生成 ponwrt 的另一个 XG2010G profile。
+仅适用于匹配的 **XG2010G OpenWrt U-Boot UBI 布局**，1 GiB 和 2 GiB 镜像不能互换。
 
-### 参考项目
-- [YYH2913/openwrt](https://github.com/YYH2913/openwrt) - XR1710G 6.18 内核集成参考（an7581-xr1710g.dts 基础结构）
-- [hurrian/openwrt-w1700k](https://github.com/hurrian/openwrt-w1700k) - XR1710G PCIe 3.0 x2 补丁参考（912 Gen3 速度协商）
-- [lvcdy/openwrt_xr1710g](https://github.com/lvcdy/openwrt_xr1710g) - XR1710G 早期移植参考（分区表、PHY 配置）
+布局仍是首个 `0x20000` 擦除块中的 `bl2`，随后为含 `factory` 等卷的 UBI；
+升级脚本只重建动态 `fit`/`rootfs_data`，保留 `fip`、环境和校准卷。
+现有布局检查和 64 MiB FIT 保护保持不变。
 
-### XG2010G PON 驱动与用户态
-- [pbs05/openwrt-pon-drivers](https://github.com/pbs05/openwrt-pon-drivers) - XG2010G PON 内核驱动及新栈数据面来源。
-- [naoki66/openwrt-pon-userspace](https://github.com/naoki66/openwrt-pon-userspace) - `airoha-ponctl`、`airoha-pond` 和整合 IPTV/语音页面的 LuCI ONU 用户态来源。
+先保存配置和必要的原厂备份，然后检查镜像：
 
-### LuCI 应用来源
-- [naoki66/luci-app-airoha](https://github.com/naoki66/luci-app-airoha) - Airoha LuCI 应用 feed，包含 `luci-app-airoha-npu`
-- [Gilly1970/Gemtek-W1700K](https://github.com/Gilly1970/Gemtek-W1700K) - Airoha 风扇控制与 FlowSense（commit db3f1c8）
-- [sirpdboy/luci-app-lucky](https://github.com/sirpdboy/luci-app-lucky) - Lucky 多功能工具
+```sh
+sysupgrade -T /tmp/xg2010g-sysupgrade.itb
+```
 
-### 相关工具
-- [JetBrains](https://www.jetbrains.com/) - 开发工具支持
-- [SourceForge](https://sourceforge.net/) - 镜像托管
+检查通过后，保留设置升级用 `sysupgrade /tmp/xg2010g-sysupgrade.itb`；
+清除设置验证用 `sysupgrade -n /tmp/xg2010g-sysupgrade.itb`。
+这条兼容升级路径不需要 `-F`；检查不通过时应先排查布局或机型。
 
-## 许可证
+## 桥接建议使用 TAG
 
-[GPL-2.0-only](https://spdx.org/licenses/GPL-2.0-only.html)（继承 ImmortalWrt）
+TAG 模式由 XG2010G 处理运营商 VLAN，下游路由器在选定 LAN 口拨号。
+公开 ONU r26 的 UNTAG 规则只识别外层 EtherType；下游自行加 802.1Q 时，
+PPPoE/IPoE 帧可能被过滤而无法拨号。本次不修改这一已知问题，等 naoki66 公开 r27
+或更高版本后再评估。
 
-## 赞赏
+ponwrt 核心支持 bridge flowtable。fw4 会覆盖透明桥接端口，ONU 的 internet-apply
+也会为 TAG 上联及指定 LAN 建立 `wanup_ft`。
+源码允许同一接口绑定多个 flow block，ONU 链优先序更早；
+**两个表同时存在时能否稳定卸载，仍需下面的实机验证**。
 
-如果这个固件对你有帮助，可以请作者喝杯咖啡 ☕
+## 刷机后验证清单
 
-<img src="c6ea388c976395326514814f80d512d5.png" alt="微信赞赏码" width="300">
+每次记录固件版本、PON 制式/光模块、运营商 VLAN、测试结果和相关日志。
+
+- **升级**：从当前固件保留设置升级一次、清除设置升级一次，均不用 `-F`。
+- **本机拨号**：确认 PPPoE、DNS、UPnP、双拨；从合适的 LAN 主机测试
+  `ping -s 1464 -M do <可响应的公网 IPv4>`，确认大包能通过。
+- **TAG 桥接**：下游路由器拨号；`head -1 /etc/internet.nft` 应显示 `full` 模式。
+  用 `nft list flowtables`、`nft list table bridge fw4`、
+  `nft list table bridge wanup` 核对 `fw4/fb` 与 `wanup/wanup_ft`，再从 PPE debugfs
+  确认实际流量已卸载，并测试重拨和双向大包。
+- **PON**：冷启动五次，记录注册和上线时间；GPON、XG-PON、XGS-PON、EPON 按实际线路分别验证。
+  EPON 在线且允许断线时，执行下面两阶段恢复测试；每次等线路恢复后再测下一项。
+- **CPU**：检查 `scaling_governor`、`scaling_max_freq` 和负载下的实际频率，确认可达到
+  1400000 kHz，并记录温度及稳定性。
+- **语音**：电话口拨入/拨出、摘挂机、振铃及 `601` 测试分机；细节见
+  [语音调试记录](docs/xg2010g-voice-debug.md)。
+- **IPTV**：分别验证 msd_lite、rtp2httpd、udpxy 及现有组播配置。
+- **LAN**：四口双向吞吐，重点检查 lan1/lan2 的 10G 协商和 lan3 的 EN8811H 2.5G。
+
+```sh
+cat /sys/kernel/debug/airoha-xpon-pon0/mac
+echo 1 > /sys/kernel/debug/airoha-xpon-pon0/recover_tx
+# 等待线路恢复，查看日志与 burst_rearms/frontend_reloads，再进行第二阶段：
+echo 2 > /sys/kernel/debug/airoha-xpon-pon0/recover_tx
+cat /sys/kernel/debug/airoha-xpon-pon0/mac
+```
+
+`recover_tx` 是 EPON 恢复路径的测试入口；不能用它证明其他 PON 制式的恢复逻辑正常。
+测试分别运行 `tests/test_ppp_script_child.py`、`test_onu_bridge_nft.py`、
+`test_pon_recovery.py`、`test_phase1_push.py`；所需源码参数和完整验证范围见迁移报告。
