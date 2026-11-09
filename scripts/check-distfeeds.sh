@@ -28,6 +28,8 @@ TOPDIR := $root
 SCRIPT_DIR := \$(TOPDIR)/scripts
 include $root/include/feeds.mk
 
+# Published feeds are packages/luci/routing/telephony/video, plus base/core.
+# Include retired build feeds here to exercise older saved configurations.
 # Production FEEDS_AVAILABLE is sorted. Keep that order here.
 FEEDS_AVAILABLE := app_airoha easytier glass helloworld luci luci_app_bandix onu_config openwrt_bandix packages pon_drivers pon_userspace pushbot routing telephony video
 
@@ -174,6 +176,14 @@ EOF
 		grep -qx "%U/packages/%A/${required}/packages.adb" "$tmp/$mode.apk" \
 			|| fail "$cfg dropped published feed $required"
 	done
+done
+
+# The maintained XG seeds must use the cleaned feed topology. Older configs
+# above still exercise runtime URL filtering for retired feed names.
+for cfg in "$root/2010.config" "$root/2010-2g.config"; do
+	if grep -En '^(# )?CONFIG_FEED_(easytier|openwrt_bandix|luci_app_bandix|helloworld|pushbot|glass|pon_userspace)(=| )' "$cfg"; then
+		fail "$cfg retains a removed feed option"
+	fi
 done
 
 echo "check-distfeeds: ok"
