@@ -1,0 +1,37 @@
+From: xiaoshao9704 <26596822+xiaoshao9704@users.noreply.github.com>
+Subject: squeezelite: keep custom codec visibility out of dependency graph
+
+The libffmpeg-audio-dec alias now resolves to configurable libffmpeg.
+Transitive feature gates make the parent depend on SQUEEZELITE_WMA_ALAC,
+while the enclosing if makes that option depend on the parent. Even an
+unselected squeezelite-custom then causes a recursive-dependency diagnostic
+during make defconfig.
+
+Expose the codec options as an independent menu, as FFmpeg already does
+for its own options. A visible-if guard also creates a Kconfig cycle here.
+Defaults remain n and no codec or package is selected by this change.
+
+Base: immortalwrt/packages@0a5212e0b37c019df5a152553e571378ec6c5dcc
+
+diff --git a/sound/squeezelite/Makefile b/sound/squeezelite/Makefile
+index 9c8fac2..540050a 100644
+--- a/sound/squeezelite/Makefile
++++ b/sound/squeezelite/Makefile
+@@ -66,7 +66,7 @@ define Package/squeezelite-custom
+ endef
+ 
+ define Package/squeezelite-custom/config
+-	if PACKAGE_squeezelite-custom
++	menu "Squeezelite custom codecs"
+ 		config SQUEEZELITE_AAC
+ 		    bool "AAC codec support"
+ 		    help
+@@ -132,7 +132,7 @@ define Package/squeezelite-custom/config
+ 		    help
+ 			WMA and ALAC codec support
+ 		    default n
+-	endif
++	endmenu
+ endef
+ 
+ define Package/squeezelite/description/default
