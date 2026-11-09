@@ -1,6 +1,18 @@
+From: xiaoshao9704 <26596822+xiaoshao9704@users.noreply.github.com>
+Subject: ONU bridge: probe optional rules and allow TAG transparent fallback
+
+Base: naoki66/OpenWrt_ONU_CONFIG public r26,
+3cb13560459f1d51136dac662baa1f399028b2b4. No released firmware source used.
+Keep full/filter probing and acknowledged reload stamps. If both reject, TAG
+bridging may continue without the ONU-owned filtering/offload table, with a
+readable last-result status. UNTAG rule rendering is unchanged.
+
+Re-evaluate whether this patch is still needed when naoki66 publishes
+OpenWrt_ONU_CONFIG r27 or later.
+
 diff --git a/luci-app-onu/root/etc/hotplug.d/iface/99-internet-bridge-nft b/luci-app-onu/root/etc/hotplug.d/iface/99-internet-bridge-nft
 new file mode 100755
-index 0000000..12b3fed
+index 0000000000000000000000000000000000000000..12b3fed784b6adc296345bb2d970c68b1f7b4d6c
 --- /dev/null
 +++ b/luci-app-onu/root/etc/hotplug.d/iface/99-internet-bridge-nft
 @@ -0,0 +1,11 @@
@@ -16,7 +28,7 @@ index 0000000..12b3fed
 +
 +/usr/libexec/internet-apply reprobe
 diff --git a/luci-app-onu/root/usr/libexec/internet-apply b/luci-app-onu/root/usr/libexec/internet-apply
-index ced2d03..598e40f 100755
+index ced2d0305fe5b8692b07cfd8a5c84eb2be94347a..235bdb40aaa7f7ce1095b5c357c92d27e35b22b2 100755
 --- a/luci-app-onu/root/usr/libexec/internet-apply
 +++ b/luci-app-onu/root/usr/libexec/internet-apply
 @@ -395,44 +395,117 @@ write_offload_defaults() {
@@ -190,12 +202,12 @@ index ced2d03..598e40f 100755
 +	chain wanup_forward {
  EOF
 -		done
-+	fi
- 
+-
 -		if [ "$IPOE" -eq 1 ]; then
 -			for port in $PORTS; do
 -				cat >>"$tmp" <<EOF
--
++	fi
+ 
 -		# IPoE operators carry native IPv4/IPv6 instead of a PPPoE session.
 -		iifname "$port" oifname "$uplink_ref" ether type { arp, ip, ip6 } \
 -			counter accept comment "ipoe-to-uplink-$port"
@@ -216,7 +228,7 @@ index ced2d03..598e40f 100755
  	}
  
  	chain forward {
-@@ -499,16 +555,252 @@ EOF
+@@ -499,16 +555,325 @@ EOF
  			flow offload @wanup_ft comment "internet-bridge-hw-offload"
  	}
  }
@@ -235,8 +247,7 @@ index ced2d03..598e40f 100755
  EOF
  	fi
 +}
- 
--	if ! nft -c -f "$tmp" >/dev/null 2>&1; then
++
 +stage_nft_file() {
 +	mktemp "${NFT_STAGE_DIR:-/etc}/internet.nft.XXXXXX"
 +}
@@ -248,6 +259,64 @@ index ced2d03..598e40f 100755
 +
 +	render_bridge_rules "$tmp" "$ruleset"
 +	nft_rules_ok "$tmp"
++}
++
+ 
+-	if ! nft -c -f "$tmp" >/dev/null 2>&1; then
++# Optional ONU filtering must not prevent a normal TAG transparent bridge.
++# This file has no nft objects; firewall4 can still load its regular ruleset.
++tag_unfiltered_rules() {
++	local tmp="$1"
++
++	[ "$TRANSMODE" = 'tag' ] || return 1
++	NFT_BRIDGE_REJECTION="$NFT_LAST_NFT_ERROR"
++	cat >"$tmp" <<'EOF'
++# internet-apply bridge ruleset: unfiltered
++# TAG transparent bridge: ONU full/filter rules were rejected by nft -c.
++# No ONU EtherType filter, conntrack zone or wanup_ft is installed.
++EOF
++	nft_rules_ok "$tmp"
++}
++
++# Only used when entering the TAG unfiltered fallback. Clearing this owned
++# table is necessary: a comment-only include does not remove old restrictions.
++remove_unfiltered_wanup_table() {
++	local tables
++
++	tables="$(nft list tables)" || return 1
++	if printf '%s\n' "$tables" | grep -qx 'table bridge wanup'; then
++		nft delete table bridge wanup || return 1
++	fi
++}
++
++# Readable last TAG-bridge result; never write onu-internet or trigger procd.
++# Staged means boot configuration only, loaded means firewall acknowledgement,
++# applied means the apply path also completed the netifd reload request.
++report_bridge_status() {
++	local ruleset="$1" phase="$2" file tmp warning
++
++	[ "$ENABLED" -eq 1 ] && [ "$MODE" = 'bridge' ] &&
++		[ "$TRANSMODE" = 'tag' ] || return 0
++	file="${INTERNET_STATUS_FILE:-/var/run/internet-apply.status}"
++	case "$ruleset" in
++		unfiltered) warning=bridge_rules_rejected ;;
++		filter) warning=bridge_flowtable_rejected ;;
++		*) warning=none ;;
++	esac
++	tmp="$(mktemp "${file}.XXXXXX")" || {
++		warn "Cannot create internet apply status file $file"
++		return 0
++	}
++	if ! {
++		printf 'requested_mode=bridge\ntransparent_mode=tag\nruleset=%s\nphase=%s\nwarning=%s\n' \
++			"$ruleset" "$phase" "$warning"
++		[ "$ruleset" != 'unfiltered' ] ||
++			printf 'nft_error=%s\n' "$NFT_BRIDGE_REJECTION"
++	} >"$tmp" || ! chmod 0644 "$tmp" || ! mv -f "$tmp" "$file"; then
++		rm -f "$tmp"
++		warn "Cannot publish internet apply status file $file"
++	fi
++	return 0
 +}
 +
 +write_nft_rules() {
@@ -280,6 +349,11 @@ index ced2d03..598e40f 100755
 +	if stage_validated_rules "$tmp" filter; then
 +		warn "Installed PPPoE/IPoE bridge filter without flowtable; the next apply retries the full table"
 +		install_nft_file "$tmp" filter || fail "Cannot install nftables rules"
++		return 0
++	fi
++	if tag_unfiltered_rules "$tmp"; then
++		warn "Both ONU bridge rulesets rejected; continuing TAG transparent bridging without ONU filtering or wanup_ft"
++		install_nft_file "$tmp" unfiltered || fail "Cannot install nftables rules"
 +		return 0
 +	fi
 +	rm -f "$tmp"
@@ -353,10 +427,14 @@ index ced2d03..598e40f 100755
 +	# Clear before reload as well: an interrupted reload is not a success.
 +	nft_clear_loaded || return 1
 +	nft_file_is "$ruleset" || return 1
-+	if /etc/init.d/firewall reload && nft_mark_loaded "$ruleset"; then
++	if /etc/init.d/firewall reload &&
++	   { [ "$ruleset" != 'unfiltered' ] || remove_unfiltered_wanup_table; } &&
++	   nft_mark_loaded "$ruleset"; then
++		report_bridge_status "$ruleset" loaded
 +		return 0
 +	fi
 +	nft_clear_loaded
++	report_bridge_status "$ruleset" load_failed
 +	return 1
 +}
 +
@@ -385,20 +463,20 @@ index ced2d03..598e40f 100755
 +	local ruleset="$1" tmp="$2"
 +
 +	if nft_file_is "$ruleset" && nft_rules_ok "$NFT_FILE"; then
-+		rm -f "$tmp"
-+		ensure_rules_loaded "$ruleset"
-+		return 0
-+	fi
-+
-+	if ! grep -qx "# internet-apply bridge ruleset: $ruleset" "$tmp" 2>/dev/null; then
  		rm -f "$tmp"
 -		fail "Generated nftables rules failed validation"
-+		warn "internet bridge nft: refusing to install incomplete staging file for $ruleset"
++		ensure_rules_loaded "$ruleset"
 +		return 0
  	fi
  
 -	chmod 0644 "$tmp"
 -	mv -f "$tmp" "$NFT_FILE"
++	if ! grep -qx "# internet-apply bridge ruleset: $ruleset" "$tmp" 2>/dev/null; then
++		rm -f "$tmp"
++		warn "internet bridge nft: refusing to install incomplete staging file for $ruleset"
++		return 0
++	fi
++
 +	if ! install_nft_file "$tmp" "$ruleset"; then
 +		warn "internet bridge nft: cannot install $ruleset rules; the next wan ifup retries"
 +		return 0
@@ -406,8 +484,10 @@ index ced2d03..598e40f 100755
 +	if firewall_reload_stamp "$ruleset"; then
 +		if [ "$ruleset" = 'full' ]; then
 +			logger -t internet "internet bridge nft upgraded to full rules (flowtable)"
-+		else
++		elif [ "$ruleset" = 'filter' ]; then
 +			logger -t internet "internet bridge nft kept on PPPoE/IPoE filter fallback"
++		else
++			logger -t internet "internet bridge nft uses TAG transparent bridging without ONU filtering"
 +		fi
 +		return 0
 +	fi
@@ -467,13 +547,18 @@ index ced2d03..598e40f 100755
 +		commit_probed_rules filter "$tmp"
 +		return 0
 +	fi
++	if tag_unfiltered_rules "$tmp"; then
++		warn "internet bridge nft reprobe: retaining TAG transparent bridging without ONU filtering or wanup_ft"
++		commit_probed_rules unfiltered "$tmp"
++		return 0
++	fi
 +	rm -f "$tmp"
 +	warn "internet bridge nft reprobe: filter rules also rejected (${NFT_LAST_NFT_ERROR})"
 +	return 0
  }
  
  #
-@@ -1013,18 +1305,27 @@ reload_runtime() {
+@@ -1013,18 +1378,27 @@ reload_runtime() {
  
  	if [ "$ENABLED" -eq 1 ]; then
  		# The bridge has to be filtered from its first forwarded frame.
@@ -503,9 +588,15 @@ index ced2d03..598e40f 100755
  load_iptv_port
  load_voice_port
  config_load network
-@@ -1039,5 +1340,5 @@ write_firewall_config
+@@ -1038,6 +1412,11 @@ write_network_config
+ write_firewall_config
  write_offload_defaults
  reload_runtime
++if [ "$ACTION" = 'boot' ]; then
++	report_bridge_status "$NFT_RULESET" staged
++else
++	report_bridge_status "$NFT_RULESET" applied
++fi
  
 -logger -t internet "Internet configuration applied (mode=$MODE)"
 +logger -t internet "Internet configuration applied (mode=$MODE ruleset=$NFT_RULESET)"
