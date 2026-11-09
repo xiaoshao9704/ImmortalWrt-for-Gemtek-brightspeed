@@ -1,5 +1,5 @@
 * -text
-*.patch text eol=lf whitespace=-indent-with-non-tab,-space-before-tab,-tab-in-indent,-trailing-space
+*.patch text=auto eol=lf whitespace=-indent-with-non-tab,-space-before-tab,-tab-in-indent,-trailing-space
 *.sh text eol=lf
 *.dts text eol=lf
 *.dts[io] text eol=lf

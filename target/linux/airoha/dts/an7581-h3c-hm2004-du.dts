@@ -62,7 +62,7 @@
 
 	leds {
 		compatible = "gpio-leds";
-
+		
 		led_power: led-power {
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_POWER;

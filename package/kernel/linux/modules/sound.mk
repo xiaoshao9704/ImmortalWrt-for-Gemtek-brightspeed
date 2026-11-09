@@ -543,7 +543,7 @@ define KernelPackage/sound-hda-codec-cirrus
 	CONFIG_SND_HDA_CODEC_CS421X=m \
 	CONFIG_SND_HDA_CODEC_CS8409=m
   FILES:= \
-	$(LINUX_DIR)/sound/hda/codecs/cirrus/snd-hda-codec-cs420x.ko \
+  	$(LINUX_DIR)/sound/hda/codecs/cirrus/snd-hda-codec-cs420x.ko \
 	$(LINUX_DIR)/sound/hda/codecs/cirrus/snd-hda-codec-cs421x.ko \
 	$(LINUX_DIR)/sound/hda/codecs/cirrus/snd-hda-codec-cs8409.ko
   AUTOLOAD:=$(call AutoProbe,snd-hda-codec-cs420x snd-hda-codec-cs421x snd-hda-codec-cs8409)
