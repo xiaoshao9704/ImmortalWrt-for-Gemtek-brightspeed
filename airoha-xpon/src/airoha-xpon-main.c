@@ -38,7 +38,7 @@ void airoha_xpon_set_data_path_link(struct airoha_xpon *xpon, bool ready)
 		netif_tx_wake_all_queues(xpon->pon_netdev);
 	} else {
 		netif_carrier_off(xpon->pon_netdev);
-		netif_tx_disable(xpon->pon_netdev);
+		netif_tx_stop_all_queues(xpon->pon_netdev);
 	}
 }
 
@@ -462,6 +462,15 @@ static void airoha_xpon_link_work(struct work_struct *work)
 		xpon->optical_signal = !airoha_xpon_xgpon_los(xpon);
 	}
 	airoha_xpon_leds_update(xpon);
+
+	/*
+	 * An armed EPON MAC that keeps missing grants has a wedged burst path:
+	 * the optics answers on I2C while the fibre carries no light. Reloading
+	 * the provider firmware from link_work restarts the line itself.
+	 */
+	if (airoha_xpon_mode_is_epon(xpon->active_mode) &&
+	    airoha_xpon_epon_recover_tx(xpon))
+		goto out_requeue;
 
 	/* IRQ queues Deactivate; link_work commits the plain MAC reset under state_lock. */
 	if (!airoha_xpon_mode_is_epon(xpon->active_mode)) {
