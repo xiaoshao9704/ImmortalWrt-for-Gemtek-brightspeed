@@ -100,13 +100,17 @@ make -j"$(nproc)"
 
 布局仍是首个 `0x20000` 擦除块中的 `bl2`，随后为含 `factory` 等卷的 UBI；
 升级脚本只重建动态 `fit`/`rootfs_data`，保留 `fip`、环境和校准卷。
-现有布局检查和 64 MiB FIT 保护保持不变。
+现有布局检查保留。构建规则 `IMAGE_SIZE := 131072k` 的上限为 128 MiB；
+这不能证明设备上的 U-Boot 能加载同等大小的镜像，刷写前仍需核对实际产物与引导配置。
+此前所述“64 MiB FIT 保护”并不存在于当前规则中。
 
 先保存配置和必要的原厂备份，然后检查镜像：
 
 ```sh
 sysupgrade -T /tmp/xg2010g-sysupgrade.itb
 ```
+
+`sysupgrade -T` 检查通过不等于已经验证实机能启动或网络/PON 能正常工作。
 
 检查通过后，保留设置升级用 `sysupgrade /tmp/xg2010g-sysupgrade.itb`；
 清除设置验证用 `sysupgrade -n /tmp/xg2010g-sysupgrade.itb`。

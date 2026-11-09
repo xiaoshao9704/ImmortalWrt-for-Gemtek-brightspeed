@@ -112,7 +112,8 @@ Airoha 130、310-09、604-01、606、608、629、744、748、915-01、990-01。
 
 两份 XG2010G DTS 与旧分支逐字节相同，保留 OPP/SMCC、direct PLL、powersave
 启动参数、PHY reset-before-id-read、ToD/PCM/SLIC。
-两个原 UBI profile 的 compat 2.0、别名、消息、分区布局及 FIT 保护保留；
+两个原 UBI profile 的 compat 2.0、别名、消息、分区布局及原 `IMAGE_SIZE := 131072k` 构建限制保留；
+该 128 MiB 上限不是实物 U-Boot 加载能力的证明，不能称为“64 MiB FIT 保护”。
 移除重复的普通 XG2010G profile。
 共享 an7581.dtsi 的 AFE 寄存器窗口、reset 和 sound-dai 定义与语音补丁配套保留。
 语音两包及修正后的源码 hash 继续使用。
