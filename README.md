@@ -17,7 +17,8 @@ ponwrt 自己支持的其他设备仍保留其上游代码；本仓库 CI 只提
 本机 PPPoE 和 TAG 桥接是主要使用方式；驱动代码覆盖 GPON、XG-PON、XGS-PON 和 EPON，
 不同运营商和光模块组合仍需实机验证。
 
-本次迁移状态、逐文件冲突处理、配置差异和验证范围见
+本轮以 **1 GiB 配置**为验收目标；2 GiB 固件验证留待后续。
+迁移状态、逐文件冲突处理、配置差异和验证范围见
 [迁移审查报告](docs/ponwrt-base-migration.md)。目前尚未运行完整固件 CI 或刷机。
 
 ## 源码和保留的功能
@@ -35,10 +36,11 @@ TUN、CAKE、BBR、cryptodev、fullcone、PPP multilink、shellsync、语音和�
 2 GiB 配置原本还选中了 Passwall 和 Lucky；Lucky 已从 ponwrt 删除，故保留 naoki66
 公开源码中的本地包，避免功能消失。没有新增 BBRv3；如以后需要，应作为单独变更评估。
 
-额外 feed 清理尚待确认：`2010.config` 有一行孤立的 `luci-i18n-pushbot-zh-cn=y`，
-但主包未启用。按“不删除已选包”的约束，easytier、openwrt_bandix、luci_app_bandix、
-helloworld、pushbot 五项目前都暂未删除。前四项在这两份配置中没有独占的有效已选包；
-helloworld 的重叠包和 Passwall 均由官方 feeds 提供。
+已删除 easytier、openwrt_bandix、luci_app_bandix、helloworld、pushbot 五项额外 feed。
+孤立的 pushbot 翻译项经确认删除；其余重叠包可由官方 feeds 提供。
+1 GiB 配置以[实机安装清单](docs/xg2010g-installed-baseline.json)为准：
+294 个旧 APK 经两项内核包合并映射为预计 292 个新 APK，没有漏掉现有功能或额外选包。
+库的 ABI 换名由检查脚本处理；这仍需用 CI 的实际 manifest 验证。
 
 所有 feed 版本固定在 [feeds.conf.default](feeds.conf.default)。自定义 feeds 仅用于构建，
 不会出现在设备的官方 distfeeds URL 中。ONU 修改只通过 `patches/feeds/onu_config/`
@@ -85,9 +87,10 @@ make -j"$(nproc)"
 
 [GitHub Actions](.github/workflows/build-firmware.yml) 默认构建 `2010.config`；
 手动构建使用 `release_type=none` 可只保留构建产物。
-迁移后须分别运行两份配置。工作流会检查 profile 隔离，并从实际编译产物确认：
+本轮先运行 1 GiB 配置；2 GiB 留待后续验证。工作流会检查 profile 隔离，并从实际编译产物确认：
 `nf-flowtable-7`、r71 xPON manifest、1.4 GHz/SMCC DTB、PPPoE frame-size 源码及对象。
-`ponwrt-verification/` 会随固件上传生成的配置、反汇编和实际包名列表。
+`ponwrt-verification/` 会随固件上传生成的配置、反汇编、实际包名列表，以及与实机基准的比较。
+配置阶段和产物阶段都运行 `check-installed-package-baseline.py`；所有已选包也必须出现在映像 manifest 中。
 
 ## 升级
 
@@ -151,4 +154,5 @@ cat /sys/kernel/debug/airoha-xpon-pon0/mac
 
 `recover_tx` 是 EPON 恢复路径的测试入口；不能用它证明其他 PON 制式的恢复逻辑正常。
 测试分别运行 `tests/test_ppp_script_child.py`、`test_onu_bridge_nft.py`、
-`test_pon_recovery.py`、`test_phase1_push.py`；所需源码参数和完整验证范围见迁移报告。
+`test_pon_recovery.py`、`test_phase1_push.py` 和 `test_installed_package_baseline.py`；
+所需源码参数和完整验证范围见迁移报告。

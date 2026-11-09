@@ -6,15 +6,15 @@
 本次新增提交的 author/committer 均为 GitHub 账号 `xiaoshao9704`。
 没有修改 main、改写历史或推送。
 
-**尚待完成**：feed 选择、最终 seed 清理/提交、用户确认后推送及两份完整固件 CI。
-当前两份原始 seed 和五项额外 feed 未改写。下文配置比较针对本地临时生成结果，
-不是已经打包到映像中的套件清单。
+**本轮验收目标为 1 GiB**，用户已指定以实机包清单为准；2 GiB 固件验证留待后续。
+五项 feed 已删除，两份 seed 已重新生成并清理；本地提交已完成，尚待确认推送及
+1 GiB 完整固件 CI。下文新套件清单是配置/元数据预测，尚不是新映像实际 manifest。
 
 完整路径、源码来源和两份配置的包名列表见 [机器可读审查记录](ponwrt-base-audit.json)。
 
 ## 提交拆分
 
-以下为文档提交之前的实现提交；本文档和审查数据另作一笔提交。
+以下为最终审查更新前的本分支提交；最终文档更新另作一笔提交。
 
 | Commit | 主题 |
 | --- | --- |
@@ -31,6 +31,9 @@
 | `57d2c4ad41` | xg2010g: retain the selected Lucky package removed by ponwrt |
 | `e3823cbc08` | ci: verify ponwrt bridge, PON and CPU build artifacts |
 | `a02b4137dc` | build: derive upstream revisions from ponwrt |
+| `afb901f2b7` | docs: record the ponwrt migration, validation and remaining feed decision |
+| `0fbe1f9410` | feeds: remove unused addons and align XG2010G profiles with the running device |
+| `10d3b0469f` | ci: preserve the installed XG2010G package inventory across upgrades |
 
 ## 31 个显式冲突
 
@@ -41,7 +44,7 @@ libffi 仅使用 ponwrt 的那份。PPP 使用其新版源码和 ujail 脚本，
 | 文件 | 最终处理 |
 | --- | --- |
 | `README.md` | 重写为 XG2010G/ponwrt 关系、升级及验证文档。 |
-| `feeds.conf.default` | 保留固定官方 feed、app_airoha、r71 专用驱动 fork 和 ONU 公共 commit；五项额外 feed 暂待确认。 |
+| `feeds.conf.default` | 保留固定官方 feed、app_airoha、r71 专用驱动 fork 和 ONU 公共 commit；五项额外 feed 已按确认删除。 |
 | `package/libs/libffi/Makefile` | 采用 pbs05/ponwrt d9dd3a49f7；需要的上下文整理另见 refreshed_contexts。 |
 | `package/network/config/firewall4/patches/001-add-bridge-flowtable-support.patch` | 保留 fork 的能力探测及透明桥接 resolver；resolver 与 ponwrt c3b518baec 的行为一致。 |
 | `package/network/config/qosify/Makefile` | 采用 pbs05/ponwrt d9dd3a49f7；需要的上下文整理另见 refreshed_contexts。 |
@@ -130,8 +133,7 @@ W1700K 的 DTS 和 U-Boot 999 **保留 ponwrt 的版本**；上游仍构建
 1. **ponwrt 已删除 Lucky**（96e54770f6），因此恢复公开 naoki 包，保留 2 GiB 所选功能。
    验证 ARM64 下载可用且确为 AArch64 ELF，init/arch 脚本语法通过；完整 LuCI/包集成待 CI。
 2. **pushbot 有一个 =y 翻译选项**，但 1 GiB 没选主包，defconfig 自动丢弃它。
-   尚未删除五项 feed 或改写原 seed，等待用户决定：清除无效翻译并删除五项 feed，
-   或启用主包/翻译并只保留 pushbot feed。
+   用户已确认删除孤立翻译和五项额外 feed；实机清单亦确认没有安装 pushbot。
 
 2 GiB 原本已选 Passwall；官方 luci 提供它。helloworld 中十个重叠已选包
 （chinadns-ng、dns2socks、ipt2socks、microsocks、两个 shadowsocks-rust、
@@ -141,30 +143,58 @@ easyTier、两个 bandix feed 没有独占的已选包。
 
 官方 distfeeds 白名单仍是 packages/luci/routing/telephony/video（另有 base/core）。
 此清单本来与 ponwrt 官方 feeds 相符，不需换成自定义 feed 名；`check-distfeeds.sh`
-已重验通过。构建 feed 与运行时下载地址保持分离。
+已重验通过，并新增了 XG seed 不得保留已退休 feed 选项的检查。
+构建 feed 与运行时下载地址保持分离。
 
 固定 packages feed 的未选用 squeezelite-custom 有 FFmpeg 传递依赖循环。
 新增一个小 feed 补丁，沿用 FFmpeg 自己独立配置菜单的方式；修正后两份 defconfig
 不再出现 Kconfig error。仍有未选用 bmx7、video 等包的依赖扫描警告，未据此声称整仓可构建。
 
-### 临时生成配置的差异
+### 以当前实机安装清单为准
 
-“327 / 413”其实是 `CONFIG_PACKAGE_*=y` **符号数**，还包含 tar、dnsmasq 和代理子选项，
-不能直接称为映像实际套件数。JSON 分别记录符号及有效包定义的列表。
+用户提供了 `ubus call system board` 与 `apk info -v`：XG2010G，
+`20261030-d922038f`、Linux 6.18.55，共 **294 个已安装包**。
+原始包名和版本保存在 [实机基准](xg2010g-installed-baseline.json)，没有从固件提取文件。
+1 GiB 已选包完整覆盖该清单：按新上游包定义和 ABI 归一化后预计 **292 个 APK**，
+没有遗漏，也没有额外选包。数量减少来自两个内核包合并：
 
-| 从 =y 消失的符号 | 范围 | 原因 |
+| 实机旧包名 | 新上游对应 | 依据 |
 | --- | --- | --- |
-| kmod-iptables | 两份 | 旧名字不存在；现行已选 kmod-ipt-core/子模块覆盖该功能 |
-| kmod-nf-log6 | 两份 | 独立包不存在；已选 kmod-nf-log/NF_LOG_SYSLOG 覆盖 IPv4/IPv6 |
-| luci-app-argon-config | 两份 | 已并入 luci-theme-argon，主题 PROVIDES 该名并含配置页面 |
-| luci-i18n-zerotier-zh-cn | 仅 1 GiB | 未选主包的孤立翻译；2 GiB 主包及翻译均保留 |
-| luci-i18n-pushbot-zh-cn | 仅 1 GiB | 未选主包的孤立翻译；尚待确认，不擅自改 seed |
+| kmod-iptables | kmod-nf-ipt | 旧包中的 ip_tables/x_tables 现由 nf-ipt 打包 |
+| kmod-nf-log6 | kmod-nf-log | 旧 nf-log6 只在 Linux <5.13 有 nf_log_ipv6 文件；6.18 上为空包，依赖 nf_log_syslog 所在的 nf-log |
+| libblobmsg-json20260721 | libblobmsg-json20261103 | libubox ABI 更新 |
+| libjson-script20260721 | libjson-script20261103 | libubox ABI 更新 |
+| libubox20260721 | libubox20261103 | libubox ABI 更新 |
+| libubus20260925 | libubus20261028 | libubus ABI 更新 |
+| libucode20230711 | libucode20261009 | libucode ABI 更新 |
 
-其余有效已选包保留，包括 Lucky、语音及 IPTV。
-2 GiB 的 full sing-box 自动要求 libcronet（隐藏 def_bool），这是保留已选 full 包的依赖，
-不换成 tiny 以规避。新出现的 Passwall SmartDNS 默认已关闭，避免额外启用功能。
-未启用的 SSR Plus 的 HTTP proxy 默认也临时关闭，避免仅凭残留子选项带入 3proxy；
-最终 feed 删除/seed 整理后应移除这些孤立子选项。
+此处也更正先前报告的表述：kmod-iptables、kmod-nf-log6 在旧固件上确实安装过，
+不能称作原本无效的选项；应依据旧源码和新打包定义确认功能转移。
+
+检查器从固定元数据读取当前 ABI，不将旧 ABI 名称锁死。
+CI 在生成配置后及实际 manifest 生成后分别检查：实机功能必须保留；所有已选包也必须
+实际打入映像。结果和完整包名映射随产物保存。
+2 GiB 种子保留既有额外包并补入实机共同基准的 3proxy，但本轮不进行其固件验收。
+
+### 与旧 seed 的差异
+
+“327 / 413”是 `CONFIG_PACKAGE_*=y` 符号数，包含子选项，不是实机包数。
+清理后分别为 **306 / 411**；完整符号变化和每个从 =y 消失的原因均在 JSON 中。
+1 GiB 的主要变化如下：
+
+| 从 =y 消失的符号 | 原因 |
+| --- | --- |
+| kmod-iptables、kmod-nf-log6 | 上表所述上游打包合并，模块功能保留 |
+| luci-app-argon-config | 配置页面已并入已选 luci-theme-argon；实机也没有独立 APK |
+| luci-i18n-pushbot-zh-cn | 主包未选、实机未安装；已获用户确认删除 |
+| luci-i18n-zerotier-zh-cn | 1 GiB 主包未选、实机未安装的孤立翻译 |
+| Passwall 的 8 个子选项 | 1 GiB 主包未选、实机未安装 |
+| SSR Plus 的 7 个子选项 | 主包未选，随 helloworld 删除 |
+| knot-resolver_dnstap | 主包未选、实机未安装的残留子选项 |
+
+所有选中的 dnsmasq-full 功能选项保留，包括 DNSSEC、nftset、conntrack、noid 和 TFTP。
+2 GiB 的新 libcronet 是保留 full sing-box 的依赖；SmartDNS 的新默认已关闭。
+上述 2 GiB 信息只记录种子整理范围，当前验收以 1 GiB 为准。
 
 ## 本地验证与范围
 
@@ -179,7 +209,7 @@ easyTier、两个 bandix feed 没有独占的已选包。
 | PPP / fw4 包补丁 | 全部 fuzz=0；PPP #638 在原 2.5.4 未包含，故保留 |
 | feed 补丁 | 8 份严格检查通过，包括未改变内容的 ONU 100 |
 | profile isolation / distfeeds | 本地两份生成配置及实际本地 kernel .config 检查通过 |
-| 固件 CI / 完整映像 | 尚未执行，需先确认推送 |
+| 固件 CI / 完整映像 | 尚未执行，待确认推送后只运行 1 GiB |
 | 实机 | 尚未执行；清单见 README |
 
 核心使用 target/linux/generic/config-6.18 + an7581/config-6.18 合并生成的配置，
@@ -199,20 +229,22 @@ python3 tests/test_ppp_script_child.py --source /path/to/prepared-ppp-2.5.4 -v
 python3 tests/test_onu_bridge_nft.py --onu-source /path/to/pristine-internet-apply --fw4-source /path/to/pristine-fw4 -v
 python3 tests/test_pon_recovery.py --source feeds/pon_drivers -v
 python3 tests/test_phase1_push.py --pon-source /path/to/full-driver-history -v
+python3 tests/test_installed_package_baseline.py -v
 ```
 
-PPP 5、ONU/fw4 27、PON 6、push 6 个测试方法全部通过；PON 内含 29 个生产路径断言及
+PPP 5、ONU/fw4 27、PON 6、push 6、安装基准 6，共 **50 个测试方法**全部通过；PON 内含 29 个生产路径断言及
 5 个负对照，push 有 19 个场景。硬件/I2C/nft/远端均使用替身，不能代替设备测试。
-新增 CI 产物检查器另用真实本地对象/DTB 加明确的假 manifest 做了两个正例和两个负例；
+新增 CI 产物检查器另用真实本地对象/DTB 加明确的假 manifest 做了两个正例和三个负例；
 这只证明检查器行为，不能视为 CI 已编出映像。
 
 ## 推送后的必做验证
 
-用户确认后推送当前分支，分别 dispatch 2010.config 和 2010-2g.config，release_type=none。
-CI 检查器要求实际 .ko 中有 nf-flowtable-7，实际 DTB 包含 1.4 GHz/SMCC，manifest 中是
-r71，并保存生成配置、PPPoE frame-size C/反汇编及映像实际包名列表。
-再将两份 manifest 与旧构建的实际 manifest 比较；当前公开旧 release 只有 buildinfo/ITB，
-没有 manifest，不能把 seed 清单冒充旧映像实际清单，也不从固件提取文件来凑比较。
+用户确认后推送当前分支，仅 dispatch **2010.config**，release_type=none。
+CI 要求实际 .ko 中有 nf-flowtable-7、实际 DTB 包含 1.4 GHz/SMCC、manifest 中是 r71，
+并保存生成配置、PPPoE frame-size C/反汇编及实际包名清单。
+以用户提供的实机 294 包清单为旧版实际基准，检查 ABI/包名迁移后每项都在新 manifest 中，
+并要求新配置所有已选包都在映像内。不能把本地配置预测冒充已经完成的固件打包结果。
+2 GiB CI 留待后续。
 
 实机重点是 compat 2.0 升级、fw4 与 ONU 两个 bridge flowtable 共存和 PPE 命中、
 所有 PON 制式、EPON 两阶段恢复、四口吞吐、语音、IPTV 及 CPU 温度稳定性。
@@ -225,6 +257,6 @@ UNTAG 外层 EtherType 问题本次仅记录，等待公开新版 ONU。
 - 改写后的 PPPoE MTU、fw4 能力探测/失败传播、PPP syncdial/#638 和独立版号。
 - 固定的驱动/ONU/app feeds，本地 Lucky，feed 补丁机制及八份补丁。
 - 两份用户配置、中文默认值、构建身份/版本、distfeeds、CI/构建脚本及原有测试/文档。
-- feed 额外项和 seed 清理仍待完成；JSON 与 git diff 给出当前全部路径。
+- 已移除五项额外 feed；实机包基准及 CI 检查器为新增维护项。JSON 与 git diff 给出全部路径。
 
 以后同步优先采用 ponwrt 的共同修复；当公开上游包含上述补丁时删除本地重复实现。
