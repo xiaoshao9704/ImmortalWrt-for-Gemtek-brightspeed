@@ -13,7 +13,7 @@ mode="$3"
 jobs="$4"
 refresh_feeds="$5"
 log_file="$6"
-config_seed="${7:-1710.config}"
+config_seed="${7:-2010.config}"
 
 case "$mode" in
 	upload|kernel|world) ;;

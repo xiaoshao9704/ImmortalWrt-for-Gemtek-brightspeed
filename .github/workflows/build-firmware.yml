@@ -5,7 +5,7 @@ name: Build Firmware
 # created. workflow_dispatch stays available for manual builds.
 #
 # Tag config seed (case-insensitive, first match): *2g* -> 2010-2g.config,
-# *1710* -> 1710.config, otherwise 2010.config (XG2010G, this fork's default).
+# otherwise 2010.config (XG2010G, this fork's default).
 # Tags containing rc, beta, or pre are prereleases; other v* tags are full
 # releases. Manual dispatch still uses its inputs. A dispatch release still
 # creates a YYYYMMDD-<commit> tag, which does not match v* and does not
@@ -19,10 +19,9 @@ on:
       config_seed:
         description: 'Build config'
         required: true
-        default: '1710.config'
+        default: '2010.config'
         type: choice
         options:
-          - 1710.config
           - 2010.config
           - 2010-2g.config
       release_type:
@@ -95,8 +94,6 @@ jobs:
             shopt -s nocasematch
             if [[ "$ref_name" == *2g* ]]; then
               config_seed="2010-2g.config"
-            elif [[ "$ref_name" == *1710* ]]; then
-              config_seed="1710.config"
             else
               config_seed="2010.config"
             fi
@@ -107,7 +104,7 @@ jobs:
           fi
 
           case "$config_seed" in
-            1710.config|2010.config|2010-2g.config) ;;
+            2010.config|2010-2g.config) ;;
             *)
               echo "Unsupported config seed: ${config_seed:-<empty>}" >&2
               exit 1
@@ -124,8 +121,8 @@ jobs:
         env:
           CONFIG_SEED: ${{ steps.resolve.outputs.config_seed }}
         run: |
-          git remote add upstream https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
-          git remote set-url upstream https://github.com/immortalwrt/immortalwrt.git
+          git remote add upstream https://github.com/pbs05/ponwrt.git 2>/dev/null || true
+          git remote set-url upstream https://github.com/pbs05/ponwrt.git
           git fetch --no-tags upstream master
 
           build_date=$(TZ=Asia/Shanghai date +'%Y%m%d')
@@ -144,7 +141,6 @@ jobs:
           echo "version_number=$version_number" >> $GITHUB_OUTPUT
           echo "version_code=$version_code" >> $GITHUB_OUTPUT
           case "$CONFIG_SEED" in
-            1710.config) device_model=XR1710G ;;
             2010.config) device_model=XG2010G ;;
             2010-2g.config) device_model=XG2010G-2G ;;
             *) echo "Unsupported config seed: $CONFIG_SEED" >&2; exit 1 ;;

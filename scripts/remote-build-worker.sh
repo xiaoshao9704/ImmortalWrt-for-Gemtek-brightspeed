@@ -11,7 +11,7 @@ mode="$1"
 jobs="$2"
 refresh_feeds="$3"
 log_file="$4"
-config_seed="${CONFIG_SEED:-1710.config}"
+config_seed="${CONFIG_SEED:-2010.config}"
 
 case "$mode" in
 	kernel|world) ;;

@@ -429,7 +429,7 @@ define Device/gemtek_xg2010g-common
 	kmod-nf-conntrack-bridge kmod-nft-bridge \
 	kmod-airoha-en7572 kmod-airoha-xpon airoha-ponctl airoha-pond \
 	kmod-airoha-tod kmod-airoha-en7581-pcm-spi \
-	-airoha-an7581-mt7996-board -airoha-en7581-mt7996-npu-firmware \
+	-airoha-en7581-mt7996-npu-firmware \
 	-kmod-mac80211 -kmod-mt7996-firmware -kmod-mt7996e \
 	-wpad-mbedtls -wpad-mesh-mbedtls -wireless-regdb
   BLOCKSIZE := 128k

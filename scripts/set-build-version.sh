@@ -24,7 +24,7 @@ set -euo pipefail
 config_file="${1:-.config}"
 
 # 从 CONFIG_TARGET_PROFILE 推导设备型号，写入 VERSION_DIST 让固件自识别。
-# 例：DEVICE_gemtek_xg2010g-ubi -> XG2010G；DEVICE_gemtek_xr1710g(-ubi) -> XR1710G
+# 例：DEVICE_gemtek_xg2010g-ubi -> XG2010G
 # 推导不到时返回空串（保持原默认 "ImmortalWrt naoki66"）。
 detect_device_model() {
 	local profile model
