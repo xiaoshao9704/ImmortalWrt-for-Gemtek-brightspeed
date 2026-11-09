@@ -10,7 +10,7 @@
 # 可用环境变量覆盖：
 #   VERSION_DIST            发行版名（默认 "ImmortalWrt naoki66"，若能从
 #                           CONFIG_TARGET_PROFILE 推导出设备型号则追加，如
-#                           "ImmortalWrt naoki66 XG2010G" / "ImmortalWrt naoki66 XR1710G"）
+#                           "ImmortalWrt naoki66 XG2010G" / "ImmortalWrt naoki66 XG2010G-2G"）
 #   BUILD_TZ                日期时区（默认 Asia/Shanghai）
 #   BUILD_DATE / BUILD_TIME 构建日期 YYYYMMDD（默认取当前时间）
 #   REPO_COMMIT / UPSTREAM_COMMIT / BUILD_ID  手动指定 commit / 构建号
@@ -82,11 +82,14 @@ fi
 repo_commit="${repo_commit:-unknown}"
 
 upstream_commit="${UPSTREAM_COMMIT:-}"
-if [[ -z "$upstream_commit" ]] && git rev-parse --verify upstream/master >/dev/null 2>&1; then
-	upstream_base="$(git merge-base HEAD upstream/master 2>/dev/null || true)"
-	if [[ -n "$upstream_base" ]]; then
-		upstream_commit="$(git rev-parse --short="$commit_len" "$upstream_base" 2>/dev/null || true)"
-	fi
+if [[ -z "$upstream_commit" ]]; then
+	for upstream_ref in ponwrt/master upstream/master; do
+		git rev-parse --verify "$upstream_ref" >/dev/null 2>&1 || continue
+		upstream_base="$(git merge-base HEAD "$upstream_ref" 2>/dev/null || true)"
+		[[ -n "$upstream_base" ]] || continue
+		upstream_commit="$(git rev-parse --short="$commit_len" "$upstream_base")"
+		break
+	done
 fi
 upstream_commit="${upstream_commit:-unknown}"
 

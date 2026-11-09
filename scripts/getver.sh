@@ -27,7 +27,8 @@ try_git() {
 		GET_REV="$(git log -n 1 --format="%h" --until "$GET_REV")"
 		;&  # FALLTHROUGH
 	*)
-		UPSTREAM_REF="$(git rev-parse --verify upstream/master 2>/dev/null)"
+		UPSTREAM_REF="$(git rev-parse --verify ponwrt/master 2>/dev/null)"
+		[ -n "$UPSTREAM_REF" ] || UPSTREAM_REF="$(git rev-parse --verify upstream/master 2>/dev/null)"
 		if [ -z "$UPSTREAM_REF" ]; then
 			BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 			UPSTREAM_REF="$(git rev-parse --verify --symbolic-full-name ${BRANCH}@{u} 2>/dev/null)"
