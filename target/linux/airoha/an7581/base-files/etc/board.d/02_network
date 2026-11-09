@@ -6,59 +6,86 @@
 . /lib/functions/uci-defaults.sh
 . /lib/functions/system.sh
 
-#
-# Gemtek XR1710G / W1700K: LAN side is lan2 lan3 lan4, WAN side is the
-# separate "wan" netdev.
-#
-# NOTE on board.json.bridge: ucidef_set_bridge_device() is deliberately NOT
-# used here.  config_generate's "[ -n "$bridge" ]" branch runs for EVERY
-# board.json network entry, so declaring a bridge would fold "wan" into it as
-# well and hand both interfaces the same "br-lan.1" device.  Leaving bridge
-# unset keeps the plain "lan -> br-lan" path.
-#
-# Whether br-lan becomes VLAN-aware is the operator's decision, not the
-# firmware's: LuCI's Network -> Switch view (switch-vlan.js) writes both the
-# vlan_filtering flag and the bridge-vlan sections as soon as a VLAN is
-# configured there.  Should that happen, these ports qualify for that view --
-# it requires every member to resolve to getType() "ethernet" or "switch",
-# and "lan3"/"lan4" are internal GSW (DSA) ports while "lan2" is &gdm4.
-#
-gemtek_setup_interfaces()
-{
-	ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"
-}
 
 an7581_setup_interfaces()
 {
 	local board="$1"
+
+	VARIANT_FILE="/proc/device-tree/variant"
+
+	if [ -f "$VARIANT_FILE" ]; then
+		VARIANT=$(tr -d '\0' < "$VARIANT_FILE")
+	else
+		VARIANT="standard"
+	fi
 
 	case "$board" in
 	airoha,an7581-evb)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "eth1"
 		;;
 	gemtek,w1700k-ubi)
-		gemtek_setup_interfaces
-		;;
-	gemtek,xr1710g|\
-	gemtek,xr1710g-ubi)
-		ucidef_set_hostname "XR1710G"
-		gemtek_setup_interfaces
+		ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"
 		;;
 	gemtek,xg2010g-ubi|\
-	gemtek,xg2010g|\
-	gemtek,xg2010g-2g-ubi|\
-	gemtek,xg2010g-2g)
+gemtek,xg2010g|\
+gemtek,xg2010g-2g-ubi|\
+gemtek,xg2010g-2g)
 		ucidef_set_hostname "XG2010G"
 		# Panel order is two RTL8261N 10G ports, EN8811H 2.5G, then switch 1G.
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+		;;
+	fiberhome,hg5382a|\
+	fiberhome,hg5585f-ct)
+		case "$VARIANT" in
+			usb-sfp)
+				# lan1 uses external GPY211; lan2 through lan4 use the integrated switch; lan5 uses usb.
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5" "pon0"
+				;;
+			*)
+				# lan1 uses external GPY211; lan2 through lan4 use the integrated switch.
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+				;;
+		esac
+		;;
+	fiberhome,hg5585f-cu)
+		case "$VARIANT" in
+			usb-sfp)
+				# lan1 through lan4 use the integrated switch. lan5 uses gdm4 usxgmii. lan6 uses usb.
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5 lan6" "pon0"
+				;;
+			*)
+				# The integrated switch provides all four panel ports.
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+				;;
+		esac
+		;;
+	unionman,ung00a)
+		# The board exposes one 2.5G and three 1G ports with PON as the uplink.
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+		;;
+	znxt,zn504xg-d|\
+	znxt,zn515xg-d)
+		# Panel numbering starts at the 2.5G port and continues through lan4.
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+		;;
+	h3c,hm2004-du)
+		# One EN8811H 2.5GE port plus three GSW ports; PON is the uplink.
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
 		;;
 	nokia,valyrian)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 10g" "wan"
 		;;
-	nokia,xg-040g-md |\
 	nokia,xg-040g-md-ubi |\
 	nokia,xg-040g-tf-ubi)
-		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+		# netifd opens pon0 when the wan interface starts.
+		case "$VARIANT" in
+			usb-sfp)
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5" "pon0"
+				;;
+			*)
+				ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
+				;;
+		esac
 		;;
 	quantum,q1000k-ubi)
 		# Both copper ports are LAN; the upstream connection is PON.

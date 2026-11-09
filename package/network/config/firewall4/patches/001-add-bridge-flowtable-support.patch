@@ -3,13 +3,14 @@ From: Bohdan Chubuk <chbgdn@gmail.com>
 Date: Wed, 1 Jul 2026 08:24:50 +0300
 Subject: [PATCH] firewall4: add bridge flowtable support
 
-Generate a bridge-family flowtable (table bridge fw4, flowtable fb)
-when the offload device list contains bridge ports, so L2-forwarded
-traffic can be offloaded via nft_flow_offload. Probe the complete bridge
-rules with nft --check first: kernels without the bridge flowtable
-backport must still be able to load the inet firewall after LAN comes up.
+Generate a bridge-family flowtable from all Linux bridge ports, including
+transparent bridges outside firewall zones. Resolve VLAN ports to physical
+lower devices (pbs05/ponwrt c3b518baec). Retain the public naoki66/fork
+supports_bridge_flowtable() probe so unavailable bridge offload does not
+prevent the inet firewall from loading.
 
 Signed-off-by: Bohdan Chubuk <chbgdn@gmail.com>
+Signed-off-by: pbs05 <27010143+pbs05@users.noreply.github.com>
 ---
 --- a/root/usr/share/ucode/fw4.uc	2026-07-01 09:54:35.812914268 +0300
 +++ b/root/usr/share/ucode/fw4.uc	2026-07-01 09:54:55.802938364 +0300

@@ -35,6 +35,11 @@ fiberhome,hg5382a|fiberhome,hg5585f-ct|fiberhome,hg5585f-cu)
 znxt,zn504xg-d|znxt,zn515xg-d|unionman,ung00a)
 	pon_data_target factory ubi 2359296
 	;;
+# The factory UBI volume on this board is 1 MiB, so it carries the compact
+# H3C layout instead of the vendor's 0x240000 reservearea offsets.
+h3c,hm2004-du)
+	pon_data_target factory ubi 1048576
+	;;
 gemtek,xg2010g-ubi|\
 gemtek,xg2010g|\
 gemtek,xg2010g-2g-ubi|\
@@ -45,7 +50,6 @@ nokia,xg-040g-md-ubi|nokia,xg-040g-tf-ubi|nokia,xg-040g-mf-ubi)
 	pon_data_target bosa ubi 262144
 	pon_data_target ri ubi 262144
 	;;
-nokia,xg-040g-md|\
 nokia,xg-040g-mf)
 	pon_data_target bosa mtd 262144
 	pon_data_target ri mtd 262144
@@ -72,7 +76,7 @@ gemtek,xg2010g-2g)
 	json_close_object
 	json_close_object
 	;;
-nokia,xg-040g-md|nokia,xg-040g-md-ubi|nokia,xg-040g-tf-ubi|nokia,xg-040g-mf-ubi|nokia,xg-040g-mf)
+nokia,xg-040g-md-ubi|nokia,xg-040g-tf-ubi|nokia,xg-040g-mf-ubi|nokia,xg-040g-mf)
 	identity_available=1
 	json_add_object identity
 	json_add_object targets
@@ -82,6 +86,19 @@ nokia,xg-040g-md|nokia,xg-040g-md-ubi|nokia,xg-040g-tf-ubi|nokia,xg-040g-mf-ubi|
 	json_add_object fields
 	identity_field pon_sn pon-sn 26 12 pon-ascii12 88
 	identity_field board_mac mac 62 6 mac-binary6
+	json_close_object
+	json_close_object
+	json_close_object
+	json_close_object
+	;;
+h3c,hm2004-du)
+	identity_available=1
+	json_add_object identity
+	json_add_object targets
+	json_add_object factory
+	json_add_object fields
+	# Device SN, plain ASCII (H3CT0005EBF0) at 0x60 of the compact layout.
+	identity_field pon_sn pon-sn 96 12 pon-ascii12
 	json_close_object
 	json_close_object
 	json_close_object

@@ -21,11 +21,6 @@ block unconditionally. Poll the SerDes link status through the indirect
 register window instead and only pulse the reset while the link is down,
 from a delayed work so that the PHY state machine is never blocked.
 
-link_change_notify() can race with a work item which has already started.
-The disable flag is therefore checked before every register access and
-before requeueing, and is published before the work is disabled, so a
-PHY teardown cannot be followed by an old SerDes reset.
-
 Hook it into both 10Gbps entries which share the base PHY ID. The parts
 this was observed on carry an RTL8261BE package marking while binding to
 the RTL8261N driver entry, the two being told apart solely by a vendor
@@ -37,7 +32,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
  drivers/net/phy/realtek/phy_patch_rtl826x.h |  4 +
  drivers/net/phy/realtek/realtek.h           |  4 +
  drivers/net/phy/realtek/realtek_main.c      | 83 +++++++++++++++++++++
- 4 files changed, 104 insertions(+), 3 deletions(-)
+ 4 files changed, 94 insertions(+), 3 deletions(-)
 
 --- a/drivers/net/phy/realtek/realtek.h
 +++ b/drivers/net/phy/realtek/realtek.h
@@ -72,7 +67,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
  #define RTL826X_VEND1_PKG_MODEL			0x103
  #define   RTL826X_VEND1_PKG_MODEL_8251		0x8251
  #define   RTL826X_VEND1_PKG_MODEL_8254		0x8254
-@@ -3265,6 +3276,80 @@ static int rtl826x_patch_db_init(struct
+@@ -3265,6 +3276,70 @@ static int rtl826x_patch_db_init(struct
  		return rtl8264b_phy_patch_db_init(phydev);
  }
  
@@ -89,10 +84,6 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
 +	struct phy_device *phydev = priv->phydev;
 +	int val;
 +
-+	/* link_change_notify() may race with an already-running work. */
-+	if (READ_ONCE(priv->sds_work_disabled))
-+		return;
-+
 +	val = rtl826x_phy_patch_sds_get(phydev, RTL826X_SDS_PAGE_LINK,
 +					RTL826X_SDS_REG_LINK);
 +	if (val < 0)
@@ -106,16 +97,10 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
 +		return;
 +	}
 +
-+	if (READ_ONCE(priv->sds_work_disabled))
-+		return;
-+
 +	rtl826x_phy_patch_sds_set(phydev, RTL826X_SDS_PAGE_RESET,
 +				  RTL826X_SDS_REG_RESET, RTL826X_SDS_RESET_ASSERT);
 +	rtl826x_phy_patch_sds_set(phydev, RTL826X_SDS_PAGE_RESET,
 +				  RTL826X_SDS_REG_RESET, RTL826X_SDS_RESET_RELEASE);
-+
-+	if (READ_ONCE(priv->sds_work_disabled))
-+		return;
 +
 +	schedule_delayed_work(&priv->sds_work,
 +			      msecs_to_jiffies(RTL826X_SDS_POLL_MS));
@@ -126,16 +111,16 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
 +	struct rtl826x_priv *priv = phydev->priv;
 +
 +	if (phydev->state != PHY_RUNNING) {
-+		if (!READ_ONCE(priv->sds_work_disabled)) {
-+			WRITE_ONCE(priv->sds_work_disabled, true);
++		if (!priv->sds_work_disabled) {
 +			disable_delayed_work(&priv->sds_work);
++			priv->sds_work_disabled = true;
 +		}
 +		return;
 +	}
 +
-+	if (READ_ONCE(priv->sds_work_disabled)) {
++	if (priv->sds_work_disabled) {
 +		enable_delayed_work(&priv->sds_work);
-+		WRITE_ONCE(priv->sds_work_disabled, false);
++		priv->sds_work_disabled = false;
 +	}
 +
 +	priv->sds_retries = 0;

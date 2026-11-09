@@ -34,6 +34,7 @@
 					#address-cells = <1>;
 					#size-cells = <1>;
 
+					/* The UBI volume retains its header while NVMEM exposes 512-byte BOB. */
 					pon_calibration: calibration@2 {
 						reg = <0x2 0x200>;
 					};
@@ -49,6 +50,7 @@
 					#address-cells = <1>;
 					#size-cells = <1>;
 
+					/* RI offset 0x1a stores VEND plus eight hexadecimal VSSN characters. */
 					pon_serial: pon-serial@1a {
 						reg = <0x1a 0xc>;
 					};

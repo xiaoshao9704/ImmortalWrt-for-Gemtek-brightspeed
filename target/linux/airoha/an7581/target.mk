@@ -3,12 +3,11 @@ SUBTARGET:=an7581
 BOARDNAME:=AN7581 / AN7566 / AN7551
 CPU_TYPE:=cortex-a53
 KERNELNAME:=Image dtbs
-FEATURES+=pwm
+FEATURES+=pwm audio
 
 DEFAULT_PACKAGES += \
-	airoha-en7581-npu-firmware uboot-envtools
+	airoha-en7581-npu-firmware kmod-nf-conntrack-bridge uboot-envtools
 
 define Target/Description
 	Build firmware images for Airoha an7581 ARM based boards.
 endef
-

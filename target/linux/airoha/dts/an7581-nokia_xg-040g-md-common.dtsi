@@ -37,6 +37,7 @@
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_WAN;
 			gpios = <&en7581_pinctrl 18 GPIO_ACTIVE_LOW>;
+			/* Registration maps O1-O3 to fast blink, O4 to slow blink, and O5 on. */
 			linux,default-trigger = "pon0-registration";
 		};
 
@@ -44,6 +45,7 @@
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_WAN;
 			gpios = <&en7581_pinctrl 19 GPIO_ACTIVE_LOW>;
+			/* The pon0-los trigger drives the LOS LED. */
 			linux,default-trigger = "pon0-los";
 		};
 
@@ -104,6 +106,7 @@
 &en7581_pinctrl {
 	gpio-ranges = <&en7581_pinctrl 0 13 50>;
 
+	/* Select the PON mux while leaving GPIO38 under optical frontend control. */
 	pon_pins: pon-pins {
 		mux {
 			function = "pon";
@@ -146,10 +149,15 @@
 };
 
 &i2c0 {
+	/* The 0x50 window loads MD32 while the frontend owns runtime window 0x51. */
 	en7572: optical-front-end@50 {
 		compatible = "airoha,en7572";
 		reg = <0x50>;
+
+		/* GPIO38 is the active-high PHY_TX_POWER_DISABLE signal. */
 		tx-disable-gpios = <&en7581_pinctrl 38 GPIO_ACTIVE_HIGH>;
+
+		/* The 512 bytes after the bosa header contain per-device optical data. */
 		nvmem-cells = <&pon_calibration>;
 		nvmem-cell-names = "calibration";
 	};
@@ -162,8 +170,8 @@
 		reg = <0xf>;
 
 		reset-gpios = <&en7581_pinctrl 31 GPIO_ACTIVE_LOW>;
-		reset-assert-us = <1000000>;
-		reset-deassert-us = <100000>;
+		reset-assert-us = <10000>;
+		reset-deassert-us = <20000>;
 
 		leds {
 			#address-cells = <1>;
@@ -196,6 +204,10 @@
 &gsw_phy2 {
 	status = "okay";
 
+	/*
+	 * The MD variant uses the switch PHY2 link-change interrupt.
+	 * The TF board removes this property and uses phylib polling.
+	 */
 	interrupts = <2>;
 
 	pinctrl-names = "gbe-led";

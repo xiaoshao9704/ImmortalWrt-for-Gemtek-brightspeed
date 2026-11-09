@@ -499,6 +499,7 @@ define Device/Init
   VID_HDR_OFFSET :=
   UBINIZE_OPTS :=
   UBINIZE_PARTS :=
+  UBINIZE_PARTS_AFTER :=
   MKUBIFS_OPTS :=
 
   FS_OPTIONS/ubifs = $$(MKUBIFS_OPTS)
@@ -537,7 +538,8 @@ endef
 DEFAULT_DEVICE_VARS := \
   DEVICE_NAME KERNEL KERNEL_INITRAMFS KERNEL_INITRAMFS_IMAGE KERNEL_SIZE \
   CMDLINE UBOOTENV_IN_UBI KERNEL_IN_UBI BLOCKSIZE PAGESIZE SUBPAGESIZE \
-  VID_HDR_OFFSET UBINIZE_OPTS UBINIZE_PARTS MKUBIFS_OPTS DEVICE_DTC_FLAGS \
+  VID_HDR_OFFSET UBINIZE_OPTS UBINIZE_PARTS UBINIZE_PARTS_AFTER \
+  MKUBIFS_OPTS DEVICE_DTC_FLAGS \
   DEVICE_DTCO_FLAGS DEVICE_DTS DEVICE_DTS_CONFIG DEVICE_DTS_DELIMITER \
   DEVICE_DTS_DIR DEVICE_DTS_OVERLAY DEVICE_DTS_LOADADDR \
   DEVICE_FDT_NUM DEVICE_IMG_PREFIX SOC BOARD_NAME UIMAGE_MAGIC UIMAGE_NAME \
@@ -690,6 +692,7 @@ define Device/Build/dtb
 	$(call Image/BuildDTB,$(strip $(2))/$(strip $(3)).dts,$$@)
 
   compile-dtb: $(KDIR)/image-$(1).dtb
+  DTBS_TO_CHECK += $(KDIR)/image-$(1).dtb
   endif
 
 endef
@@ -963,11 +966,12 @@ define BuildImage
   prepare:
   compile:
   compile-dtb:
+  check-dtb:
   clean:
   image_prepare:
 
   ifeq ($(IB),)
-    .PHONY: download prepare compile compile-dtb clean image_prepare kernel_prepare install install-images
+    .PHONY: download prepare compile compile-dtb check-dtb clean image_prepare kernel_prepare install install-images
     compile:
 		$(call Build/Compile)
 
@@ -975,6 +979,11 @@ define BuildImage
 		$(call Build/Clean)
 
     compile-dtb:
+    check-dtb: compile-dtb
+	@for dtb in $$(sort $$(DTBS_TO_CHECK)); do \
+		dt-validate -s $(LINUX_DIR)/Documentation/devicetree/bindings/processed-schema.json \
+			$(if $(DT_SCHEMA_FILES),-l "$(DT_SCHEMA_FILES)",-m) "$$$$dtb" || exit 1; \
+	done
     image_prepare: compile compile-dtb
 		mkdir -p $(BIN_DIR) $(KDIR)/tmp
 		rm -rf $(BUILD_DIR)/json_info_files
