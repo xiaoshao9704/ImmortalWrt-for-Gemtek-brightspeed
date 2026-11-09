@@ -23,12 +23,5 @@
 		"CAP_NET_ADMIN",
 		"CAP_NET_BIND_SERVICE",
 		"CAP_NET_RAW"
-	],
-	"rlimits": [
-		{
-			"type": "nofile",
-			"soft": 8192,
-			"hard": 8192
-		}
 	]
 }
