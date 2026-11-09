@@ -176,6 +176,7 @@ jobs:
           make defconfig
           bash scripts/check-distfeeds.sh
           bash scripts/check-gemtek-profile-isolation.sh --config .config
+          python3 scripts/check-installed-package-baseline.py --config .config
           grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
 
       - name: Verify libffi build dependency

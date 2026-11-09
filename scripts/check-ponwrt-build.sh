@@ -74,6 +74,9 @@ for manifest in "${manifests[@]}"; do
 		|| fail "airoha-xpon r71 missing from $manifest"
 	bash "$root/scripts/check-gemtek-profile-isolation.sh" \
 		--config "$config" --kernel-config "$kernel/.config" --manifest "$manifest"
+	python3 "$root/scripts/check-installed-package-baseline.py" \
+		--config "$config" --manifest "$manifest" \
+		--report "$report/$(basename "$manifest").baseline.json"
 	awk '{ print $1 }' "$manifest" | sort -u > "$report/$(basename "$manifest").packages"
 done
 echo "ponwrt verification passed; evidence: $report"
