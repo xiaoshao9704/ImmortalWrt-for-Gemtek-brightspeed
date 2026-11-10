@@ -131,8 +131,8 @@ W1700K 的 DTS 和 U-Boot 999 **保留 ponwrt 的版本**；上游仍构建
 
 任务给定的两项事实与实际代码不同，处理如下：
 
-1. **ponwrt 已删除 Lucky**（96e54770f6），因此恢复公开 naoki 包，保留 2 GiB 所选功能。
-   验证 ARM64 下载可用且确为 AArch64 ELF，init/arch 脚本语法通过；完整 LuCI/包集成待 CI。
+1. **ponwrt 已删除 Lucky**（96e54770f6）。迁移时曾恢复公开 naoki 包以保留 2 GiB 所选功能；
+   之后 2 GiB 配置按要求与 1 GiB 统一，不再选中 Lucky，本地包已删除。
 2. **pushbot 有一个 =y 翻译选项**，但 1 GiB 没选主包，defconfig 自动丢弃它。
    用户已确认删除孤立翻译和五项额外 feed；实机清单亦确认没有安装 pushbot。
 

@@ -33,8 +33,8 @@ ponwrt 自己支持的其他设备仍保留其上游代码；本仓库 CI 只提
 
 保留两份配置原来选中的 IPTV、Argon/配置页面、package-manager、NPU、WireGuard、
 TUN、CAKE、BBR、cryptodev、fullcone、PPP multilink、shellsync、语音和诊断工具。
-2 GiB 配置原本还选中了 Passwall 和 Lucky；Lucky 已从 ponwrt 删除，故保留 naoki66
-公开源码中的本地包，避免功能消失。没有新增 BBRv3；如以后需要，应作为单独变更评估。
+2 GiB 配置已与 1 GiB 配置统一，不再选中 Passwall 和 Lucky；本地 Lucky 包随之删除，
+不再保留 ponwrt 之外的这一份差异。没有新增 BBRv3；如以后需要，应作为单独变更评估。
 
 已删除 easytier、openwrt_bandix、luci_app_bandix、helloworld、pushbot 五项额外 feed。
 孤立的 pushbot 翻译项经确认删除；其余重叠包可由官方 feeds 提供。
