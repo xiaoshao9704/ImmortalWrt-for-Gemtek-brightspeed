@@ -139,7 +139,7 @@ EOF
 # Device configs enable the build-only feeds. None of those names may be
 # emitted, including when the feed is commented out in feeds.conf.default
 # but still set in an older .config (glass, pon_userspace).
-for cfg in "$root"/2010.config "$root"/2010-2g.config "$root"/040.config; do
+for cfg in "$root"/2010.config "$root"/2010-2g.config; do
 	[[ -f "$cfg" ]] || continue
 	names="$(sed -n 's/^CONFIG_FEED_\([A-Za-z0-9_]*\)=.*/\1/p' "$cfg" | sort -u | tr '\n' ' ')"
 	[[ -n "$names" ]] || fail "no CONFIG_FEED_* entries in $cfg"
