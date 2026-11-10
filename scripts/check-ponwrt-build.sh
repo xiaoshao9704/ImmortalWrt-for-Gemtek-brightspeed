@@ -59,23 +59,11 @@ dtb="$kernel/../image-$dts.dtb"
 # a CPU1 fault within a minute with it enabled on the same SoC (16aa9e1c9b).
 # The board DTS must stay on the ponwrt OPP table (top 1.2 GHz) without the
 # direct-PLL opt-in or the extra 1.25-1.4 GHz and SMCC 15-18 levels.
-for opp in opp-1250000000 opp-1300000000 opp-1350000000 opp-1400000000; do
-	if fdtget -l "$dtb" /opp-table | grep -Fxq "$opp"; then
-		fail "overclock OPP $opp is present"
-	fi
-done
-for level in opp15 opp16 opp17 opp18; do
-	if fdtget -l "$dtb" /opp-table-cpu-smcc | grep -Fxq "$level"; then
-		fail "overclock SMCC level $level is present"
-	fi
-done
-if fdtget -p "$dtb" /cpufreq | grep -Fxq 'airoha,force-direct-pll'; then
-	fail "direct PLL opt-in is present"
-fi
-if fdtget -t s "$dtb" /chosen bootargs | grep -Fq 'cpufreq.default_governor='; then
-	fail "board DTS overrides the cpufreq governor"
-fi
+python3 "$root/scripts/check-xg2010g-cpu-dtb.py" "$dtb" \
+	| tee "$report/cpu-dtb.txt"
 cp "$dtb" "$report/"
+python3 "$root/tests/test_airoha_rx_starvation.py" --source "$kernel" -v \
+	2>&1 | tee "$report/qdma-rx-starvation-tests.txt"
 
 mapfile -t manifests < <(find "$target" -maxdepth 1 -type f -name '*manifest' | sort)
 (( ${#manifests[@]} > 0 )) || fail "no image manifest"

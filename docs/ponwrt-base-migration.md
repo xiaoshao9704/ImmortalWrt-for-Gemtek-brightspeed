@@ -1,5 +1,10 @@
 # ponwrt 基底迁移审查记录
 
+本文保留迁移时的历史验证结果，不代表最新 tip 已构建。`05c2711341` 的增量
+已删除 Lucky、040 seed、0401/0402 与超频 DTS/默认设置，并加入 QDMA RX 饥饿
+唤醒补丁 929；两款配置的软件包已统一。当前验收要求是最高 OPP 1.2 GHz、
+无 direct PLL 和调速器覆盖。下文旧编译结果和 JSON 是历史快照，不能作为新镜像证据。
+
 分支：`codex/ponwrt-base`，从指定的 `5d0f942350` 新建。
 一次性合并 `pbs05/ponwrt@d9dd3a49f7bb7661c01e9c57c9e2aac2a1114b3e`，
 共同祖先为 `2248ed75465327b4eed0ffcc3ece361dc1e62d75`。
@@ -90,7 +95,7 @@ libffi 仅使用 ponwrt 的那份。PPP 使用其新版源码和 ujail 脚本，
 | naoki generic 675-01..07 | pbs05 generic 675-01..14 |
 | 9999-12 | 675-09 |
 
-保留公开 naoki 补丁：0401、0402、201、202 AFE、204、625、628、629、
+当前保留公开 naoki 补丁：201、202 AFE、204、625、628、629、
 743 optional SerDes restore、744、910-02、920-17、ToD 920-xg2010g-pon-19、990-01。
 原作者和补丁说明均保留，来源记录于各主题提交。
 
@@ -110,8 +115,8 @@ Airoha 130、310-09、604-01、606、608、629、744、748、915-01、990-01。
 
 ## 机型、语音和清理
 
-两份 XG2010G DTS 与旧分支逐字节相同，保留 OPP/SMCC、direct PLL、powersave
-启动参数、PHY reset-before-id-read、ToD/PCM/SLIC。
+迁移时两份 XG2010G DTS 与旧分支逐字节相同；后续撤销超频，删除扩展 OPP/SMCC、
+direct PLL 和 powersave 启动参数。PHY reset-before-id-read、ToD/PCM/SLIC 保留。
 两个原 UBI profile 的 compat 2.0、别名、消息、分区布局及原 `IMAGE_SIZE := 131072k` 构建限制保留；
 该 128 MiB 上限不是实物 U-Boot 加载能力的证明，不能称为“64 MiB FIT 保护”。
 移除重复的普通 XG2010G profile。
@@ -125,7 +130,7 @@ rtl8812au-ct 原本就不存在。删除了未选用的 MT7996 NPU 覆盖固件�
 
 W1700K 的 DTS 和 U-Boot 999 **保留 ponwrt 的版本**；上游仍构建
 `an7581_gemtek_w1700k`，不能按 XR 残留删除它们。
-`11-xr1710g-cpufreq-defaults` 文件名保留，仅含 XG ondemand/max 1400000 部分。
+`11-xr1710g-cpufreq-defaults` 已随撤销超频删除。
 
 ## feed 和配置发现
 
@@ -175,7 +180,7 @@ easyTier、两个 bandix feed 没有独占的已选包。
 检查器从固定元数据读取当前 ABI，不将旧 ABI 名称锁死。
 CI 在生成配置后及实际 manifest 生成后分别检查：实机功能必须保留；所有已选包也必须
 实际打入映像。结果和完整包名映射随产物保存。
-2 GiB 种子保留既有额外包并补入实机共同基准的 3proxy，但本轮不进行其固件验收。
+2 GiB 种子后续已与 1 GiB 软件包对齐；本轮只做两份配置验证，不进行 2 GiB 固件验收。
 
 ### 与旧 seed 的差异
 
@@ -198,6 +203,9 @@ CI 在生成配置后及实际 manifest 生成后分别检查：实机功能必�
 上述 2 GiB 信息只记录种子整理范围，当前验收以 1 GiB 为准。
 
 ## 本地验证与范围
+
+以下表格及 50 项测试计数属于原迁移基线，保留历史记录；撤销超频后的新 tip
+须重新验证，不复用此处的 1.4 GHz DTB 或构建结论。
 
 | 检查 | 结果 |
 | --- | --- |
@@ -241,7 +249,8 @@ PPP 5、ONU/fw4 27、PON 6、push 6、安装基准 6，共 **50 个测试方法*
 ## 推送后的必做验证
 
 用户确认后推送当前分支，仅 dispatch **2010.config**，release_type=none。
-CI 要求实际 .ko 中有 nf-flowtable-7、实际 DTB 包含 1.4 GHz/SMCC、manifest 中是 r71，
+CI 要求实际 .ko 中有 nf-flowtable-7、实际 DTB 最高 OPP 为 1.2 GHz、SMCC 最高为 14、
+无 direct PLL 或 cpufreq governor 覆盖、manifest 中是 r71，
 并保存生成配置、PPPoE frame-size C/反汇编及实际包名清单。
 以用户提供的实机 294 包清单为旧版实际基准，检查 ABI/包名迁移后每项都在新 manifest 中，
 并要求新配置所有已选包都在映像内。不能把本地配置预测冒充已经完成的固件打包结果。
@@ -253,10 +262,10 @@ UNTAG 外层 EtherType 问题本次仅记录，等待公开新版 ONU。
 
 ## 相对 ponwrt 的长期差异
 
-- 两个 XG2010G UBI profile、DTS、升级/envtools/板级别名、CPU 默认策略。
+- 两个 XG2010G UBI profile、DTS、升级/envtools/板级别名；CPU 使用 ponwrt 默认策略。
 - 上列 14 个公开内核补丁、ToD 覆盖文件/包、voice 两包及目标 sound/DMA 配置。
 - 改写后的 PPPoE MTU、fw4 能力探测/失败传播、PPP syncdial/#638 和独立版号。
-- 固定的驱动/ONU/app feeds，本地 Lucky，feed 补丁机制及八份补丁。
+- 固定的驱动/ONU/app feeds，feed 补丁机制及八份补丁；本地 Lucky 已删除。
 - 两份用户配置、中文默认值、构建身份/版本、distfeeds、CI/构建脚本及原有测试/文档。
 - 已移除五项额外 feed；实机包基准及 CI 检查器为新增维护项。JSON 与 git diff 给出全部路径。
 

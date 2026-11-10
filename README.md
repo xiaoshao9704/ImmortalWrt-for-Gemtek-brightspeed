@@ -39,8 +39,9 @@ TUN、CAKE、BBR、cryptodev、fullcone、PPP multilink、shellsync、语音和�
 已删除 easytier、openwrt_bandix、luci_app_bandix、helloworld、pushbot 五项额外 feed。
 孤立的 pushbot 翻译项经确认删除；其余重叠包可由官方 feeds 提供。
 1 GiB 配置以[实机安装清单](docs/xg2010g-installed-baseline.json)为准：
-294 个旧 APK 经两项内核包合并映射为预计 292 个新 APK，没有漏掉现有功能或额外选包。
-库的 ABI 换名由检查脚本处理；这仍需用 CI 的实际 manifest 验证。
+294 个旧 APK 经两项内核包合并映射为 292 个新 APK，再新增 `luci-app-pon-status`，
+配置预计共 293 个 APK，没有漏掉旧清单功能。库的 ABI 换名由检查脚本处理；
+这仍需用新构建的实际 manifest 验证。
 
 所有 feed 版本固定在 [feeds.conf.default](feeds.conf.default)。自定义 feeds 仅用于构建，
 不会出现在设备的官方 distfeeds URL 中。ONU 修改只通过 `patches/feeds/onu_config/`
@@ -93,7 +94,9 @@ make -j"$(nproc)"
 [GitHub Actions](.github/workflows/build-firmware.yml) 默认构建 `2010.config`；
 手动构建使用 `release_type=none` 可只保留构建产物。
 本轮先运行 1 GiB 配置；2 GiB 留待后续验证。工作流会检查 profile 隔离，并从实际编译产物确认：
-`nf-flowtable-7`、r71 xPON manifest、DTB 中没有超频档位和直接 PLL、PPPoE frame-size 源码及对象。
+`nf-flowtable-7`、r71 xPON manifest、DTB 最高 OPP 为 1.2 GHz 且没有直接 PLL、PPPoE frame-size 源码及对象。
+CPU 检查读取实际频率值，损坏或缺少节点时失败；QDMA 测试对实际已打补丁的 IRQ
+处理函数执行主机侧状态组合和负向对照，不代替设备验证。
 `ponwrt-verification/` 会随固件上传生成的配置、反汇编、实际包名列表，以及与实机基准的比较。
 配置阶段和产物阶段都运行 `check-installed-package-baseline.py`；所有已选包也必须出现在映像 manifest 中。
 
@@ -146,8 +149,9 @@ ponwrt 核心支持 bridge flowtable。fw4 会覆盖透明桥接端口，ONU 的
   确认实际流量已卸载，并测试重拨和双向大包。
 - **PON**：冷启动五次，记录注册和上线时间；GPON、XG-PON、XGS-PON、EPON 按实际线路分别验证。
   EPON 在线且允许断线时，执行下面两阶段恢复测试；每次等线路恢复后再测下一项。
-- **CPU**：检查 `scaling_governor`、`scaling_max_freq` 和负载下的实际频率，确认可达到
-  1400000 kHz，并记录温度及稳定性。
+- **CPU**：若存在 cpufreq policy，记录 `scaling_governor`、`scaling_max_freq`、
+  可用频率与实际频率，确认最高不超过 1200000 kHz；没有 policy 时如实记录，
+  不据此推断运行频率。记录温度及稳定性。
 - **语音**：电话口拨入/拨出、摘挂机、振铃及 `601` 测试分机；细节见
   [语音调试记录](docs/xg2010g-voice-debug.md)。
 - **IPTV**：分别验证 msd_lite、rtp2httpd、udpxy 及现有组播配置。
