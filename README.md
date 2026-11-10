@@ -28,7 +28,7 @@ ponwrt 自己支持的其他设备仍保留其上游代码；本仓库 CI 只提
 | pbs05/ponwrt `d9dd3a49f7` | 新的 ImmortalWrt 基底、generic bridge flowtable、Airoha 网络/PON/PCS/LRO、用户空间和 libffi |
 | [PON 驱动 fork](https://github.com/xiaoshao9704/openwrt-pon-drivers/tree/xg2010g-merged) `fec6b02eae6ccca8e8313d171102670183224b02` | naoki66/pbs05 合并版，`airoha-xpon` r71，包含 EPON 未 prepare 时重新准备 TX 的修复 |
 | [naoki66/OpenWrt_ONU_CONFIG](https://github.com/naoki66/OpenWrt_ONU_CONFIG) `3cb13560459f1d51136dac662baa1f399028b2b4` | 公开 ONU r26，本机拨号、桥接和 IPTV 用户空间；以 `onu_config` feed 取代 `pon_userspace` |
-| naoki66 公开固件源码 | XG2010G UBI/升级保护、1.4 GHz OPP、10G/2.5G PHY/PCS、ToD、语音、改写后的 PPPoE MTU 和 FDB 漫游修复 |
+| naoki66 公开固件源码 | XG2010G UBI/升级保护、10G/2.5G PHY/PCS、ToD、语音、改写后的 PPPoE MTU 和 FDB 漫游修复 |
 | 本 fork | fw4 加载失败传播及能力探测、PPP syncdial/PR #638、UPnP counter、feed 补丁机制、distfeeds、中文 UI、CI 和原有回归测试 |
 
 保留两份配置原来选中的 IPTV、Argon/配置页面、package-manager、NPU、WireGuard、
@@ -49,14 +49,19 @@ TUN、CAKE、BBR、cryptodev、fullcone、PPP multilink、shellsync、语音和�
 
 ## CPU 默认策略
 
-两份原始 XG2010G DTS 均保留 1.25、1.30、1.35、1.40 GHz OPP 及对应 SMCC 档位，
-并启用 `airoha,force-direct-pll`。早期启动参数仍为
-`cpufreq.default_governor=powersave`。
+XG2010G 不再超频，CPU 频率表与 ponwrt 相同（最高 1.2 GHz）。已删除：
 
-首次应用板级 CPU 默认设置时，策略为 **ondemand，最高 1.4 GHz**，并非锁定在 1.4 GHz。
-已有明确保存的 CPU 策略会被保留；uci-defaults 文件名
-`11-xr1710g-cpufreq-defaults` 不变，以免升级后重复执行。
-1.4 GHz 的温度、供电和长期稳定性需要在实际设备上检查。
+- DTS 中 1.25–1.40 GHz 的 OPP、SMCC 15–18 档位、`airoha,force-direct-pll`
+  和 `cpufreq.default_governor=powersave` 启动参数；
+- `0401`（BL31 GET_FREQ 失败时改读 PLL 寄存器）、`0402`（板级启用直接 PLL）；
+- `11-xr1710g-cpufreq-defaults`（ondemand、最高 1.4 GHz）。
+
+原因：naoki66 在同一颗 AN7581 SoC 的 XR1710G 上对照测试，启用直接 PLL 调频后
+50.72 秒复现 CPU1 bit63 故障，移除后冷启动 576 秒无异常（naoki66 16aa9e1c9b），
+根因未明，因此已从全部 AN7581 机型移除。
+
+保留配置升级的设备，`/etc/config/cpufreq` 里旧的 `maxfreq0='1400000'` 不会被清除；
+频率表已没有 1.2 GHz 以上的档位，旧值不再起作用。
 
 ## 后续同步
 
@@ -88,7 +93,7 @@ make -j"$(nproc)"
 [GitHub Actions](.github/workflows/build-firmware.yml) 默认构建 `2010.config`；
 手动构建使用 `release_type=none` 可只保留构建产物。
 本轮先运行 1 GiB 配置；2 GiB 留待后续验证。工作流会检查 profile 隔离，并从实际编译产物确认：
-`nf-flowtable-7`、r71 xPON manifest、1.4 GHz/SMCC DTB、PPPoE frame-size 源码及对象。
+`nf-flowtable-7`、r71 xPON manifest、DTB 中没有超频档位和直接 PLL、PPPoE frame-size 源码及对象。
 `ponwrt-verification/` 会随固件上传生成的配置、反汇编、实际包名列表，以及与实机基准的比较。
 配置阶段和产物阶段都运行 `check-installed-package-baseline.py`；所有已选包也必须出现在映像 manifest 中。
 

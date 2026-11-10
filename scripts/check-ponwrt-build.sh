@@ -55,16 +55,26 @@ else
 fi
 dtb="$kernel/../image-$dts.dtb"
 [[ -s "$dtb" ]] || fail "missing compiled $dts.dtb"
-[[ "$(fdtget -t u "$dtb" /opp-table/opp-1400000000 opp-hz)" == '0 1400000000' ]] \
-	|| fail "1.4 GHz OPP is absent"
-[[ "$(fdtget -t u "$dtb" /opp-table-cpu-smcc/opp18 opp-level)" == 18 ]] \
-	|| fail "SMCC OPP18 is absent"
-[[ "$(fdtget -t x "$dtb" /opp-table/opp-1400000000 required-opps)" == \
-	"$(fdtget -t x "$dtb" /opp-table-cpu-smcc/opp18 phandle)" ]] \
-	|| fail "CPU and SMCC OPPs are not linked"
-fdtget -p "$dtb" /cpufreq | grep -Fxq 'airoha,force-direct-pll' || fail "direct PLL opt-in is absent"
-fdtget -t s "$dtb" /chosen bootargs | grep -Fq 'cpufreq.default_governor=powersave' \
-	|| fail "early boot governor changed"
+# The AN7581 direct-PLL CPU frequency scaling is not used: naoki66 reproduced
+# a CPU1 fault within a minute with it enabled on the same SoC (16aa9e1c9b).
+# The board DTS must stay on the ponwrt OPP table (top 1.2 GHz) without the
+# direct-PLL opt-in or the extra 1.25-1.4 GHz and SMCC 15-18 levels.
+for opp in opp-1250000000 opp-1300000000 opp-1350000000 opp-1400000000; do
+	if fdtget -l "$dtb" /opp-table | grep -Fxq "$opp"; then
+		fail "overclock OPP $opp is present"
+	fi
+done
+for level in opp15 opp16 opp17 opp18; do
+	if fdtget -l "$dtb" /opp-table-cpu-smcc | grep -Fxq "$level"; then
+		fail "overclock SMCC level $level is present"
+	fi
+done
+if fdtget -p "$dtb" /cpufreq | grep -Fxq 'airoha,force-direct-pll'; then
+	fail "direct PLL opt-in is present"
+fi
+if fdtget -t s "$dtb" /chosen bootargs | grep -Fq 'cpufreq.default_governor='; then
+	fail "board DTS overrides the cpufreq governor"
+fi
 cp "$dtb" "$report/"
 
 mapfile -t manifests < <(find "$target" -maxdepth 1 -type f -name '*manifest' | sort)

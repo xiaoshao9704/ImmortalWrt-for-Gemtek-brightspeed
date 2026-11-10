@@ -261,3 +261,12 @@ UNTAG 外层 EtherType 问题本次仅记录，等待公开新版 ONU。
 - 已移除五项额外 feed；实机包基准及 CI 检查器为新增维护项。JSON 与 git diff 给出全部路径。
 
 以后同步优先采用 ponwrt 的共同修复；当公开上游包含上述补丁时删除本地重复实现。
+
+
+## 后续变更：移除超频（2026-11-10）
+
+两份 XG2010G DTS 删除 1.25–1.40 GHz OPP、SMCC 15–18、`airoha,force-direct-pll`
+和 powersave 启动参数；删除 `0401`、`0402` 与 `11-xr1710g-cpufreq-defaults`。
+CI 的 DTB 检查改为确认这些项目不存在。原因见 README「CPU 默认策略」：
+naoki66 在同 SoC 上复现直接 PLL 调频的 CPU1 故障（16aa9e1c9b）。上文中关于
+1.4 GHz/SMCC/direct PLL 的保留与检查描述以此为准，已不再适用。
