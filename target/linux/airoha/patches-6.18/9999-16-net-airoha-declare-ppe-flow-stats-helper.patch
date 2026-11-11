@@ -1,0 +1,19 @@
+From: XiaoShao <26596822+xiaoshao9704@users.noreply.github.com>
+Subject: [PATCH] net: airoha: declare PPE flow stats helper before its first use
+
+The preceding flow-stats patch calls this helper from the FOE entries
+printer before its definition later in the file. Declare the static bool
+helper before either caller to avoid an implicit int declaration and the
+subsequent conflicting type error. No runtime behavior changes.
+
+--- a/drivers/net/ethernet/airoha/airoha_ppe_debugfs.c
++++ b/drivers/net/ethernet/airoha/airoha_ppe_debugfs.c
+@@ -9,6 +9,8 @@
+ #include "airoha_regs.h"
+ #include "airoha_eth.h"
+ 
++static bool airoha_ppe_flow_stats_available(struct airoha_ppe *ppe);
++
+ static void airoha_debugfs_ppe_print_tuple(struct seq_file *m,
+ 					   void *src_addr, void *dest_addr,
+ 					   u16 *src_port, u16 *dest_port,
