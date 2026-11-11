@@ -15,14 +15,14 @@ Vs upstream `2010.config`, packages trimmed to match the live ONT cleanup:
 - VoIP: `asterisk*` / ONU voice
 - IPTV helpers: `udpxy`, `msd_lite`, `rtp2httpd` (+ LuCI), `omcproxy`, `igmpproxy`
 - UPnP: `miniupnpd-nftables` / `luci-app-upnp`
-- `pbr` / `luci-app-pbr` packaged with upstream defaults (no first-boot override)
+- `pbr` / `luci-app-pbr` are explicitly excluded (as of main 7e71a879).
 
 No PPPoE secrets. Network defaults unchanged (br-lan + pon0 DHCP).
 `sync-upstream` workflow disabled so these choices are not overwritten blindly.
 
 Build reproducibility and diagnostics:
-- Restore libffi unchanged from ImmortalWrt commit
-  `9b835ec6264f3364a22a9c67909f16bf5e5328d1` to match the packages feed.
+- Keep current upstream libffi 3.8.0, including host support and the Python
+  target-libffi build dependency; verify the pinned feed combination in CI.
 - Pin every feed to the source revisions recorded on 2026-10-26; update core
   and feeds together, and validate the combination before publishing images.
 - Check libffi target/host package metadata before building, retain per-package

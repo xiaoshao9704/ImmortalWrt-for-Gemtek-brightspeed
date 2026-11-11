@@ -1,0 +1,110 @@
+name: Build lean XG2010G candidate
+
+on:
+  push:
+    branches:
+      - codex/xg2010g-naoki-update-20261111
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lean-xg2010g-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang gcc g++ binutils bzip2 device-tree-compiler gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make flex bison
+      - name: Install pinned public feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          bash scripts/fix-stale-golang-host.sh
+          FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+      - name: Configure lean 1 GiB candidate
+        run: |
+          cp 2010.config .config
+          make defconfig
+          UPSTREAM_COMMIT=a6dce40a bash scripts/set-build-version.sh .config
+          make defconfig
+          bash scripts/check-distfeeds.sh
+          bash scripts/check-gemtek-profile-isolation.sh --config .config
+          python3 scripts/check-lean-firmware.py --config .config
+          python3 tests/test_lean_firmware.py
+          sh scripts/check-pon-link-watchdog.sh
+      - name: Download sources
+        shell: bash
+        run: |
+          set -o pipefail
+          make download -j8 BUILD_LOG=1 2>&1 | tee download.log
+      - name: Build firmware
+        shell: bash
+        run: |
+          set -o pipefail
+          make -j2 world BUILD_LOG=1 2>&1 | tee build.log
+      - name: Verify actual build and regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=bin/targets/airoha/an7581
+          bash scripts/check-firmware-artifacts.sh --config .config --directory "$out"
+          manifest=$(find "$out" -maxdepth 1 -type f -name '*gemtek_xg2010g-ubi*manifest' -print -quit)
+          test -n "$manifest"
+          kernel_config=$(find build_dir -type f -path '*/linux-6.18.60/.config' -print -quit)
+          rootfs=$(find build_dir -type d -name root-airoha -print -quit)
+          test -n "$kernel_config"
+          test -n "$rootfs"
+          bash scripts/check-gemtek-profile-isolation.sh --config .config --kernel-config "$kernel_config" --manifest "$manifest"
+          python3 scripts/check-lean-firmware.py --config .config --manifest "$manifest" --rootfs "$rootfs"
+          if grep -Eq '^CONFIG_(CPU_FREQ|ARM_AIROHA_SOC_CPUFREQ|AIROHA_CPU_PM_DOMAIN)=(y|m)$' "$kernel_config"; then
+            echo 'AN7581 CPU DVFS unexpectedly enabled' >&2
+            exit 1
+          fi
+          ppp_main=$(find build_dir -type f -path '*/pppd/main.c' -print -quit)
+          fw4_main=$(find build_dir -type f -path '*/firewall4-*/root/sbin/fw4' -print -quit)
+          test -n "$ppp_main"
+          test -n "$fw4_main"
+          python3 tests/test_ppp_script_child.py --source "$(dirname "$(dirname "$ppp_main")")"
+          python3 tests/test_firewall4_load_failure.py --source "$(dirname "$(dirname "$(dirname "$fw4_main")")")"
+          pristine=$(mktemp -d)
+          trap 'rm -rf "$pristine"' EXIT
+          mkdir -p "$pristine/root/sbin"
+          git -C feeds/onu_config show HEAD:luci-app-onu/root/usr/libexec/internet-apply > "$pristine/internet-apply"
+          cp "$fw4_main" "$pristine/root/sbin/fw4"
+          (cd "$pristine" && git apply --reverse "$GITHUB_WORKSPACE/package/network/config/firewall4/patches/999-propagate-nft-load-failure.patch")
+          python3 tests/test_onu_bridge_nft.py --onu-source "$pristine/internet-apply" --fw4-source "$pristine/root/sbin/fw4"
+          mkdir -p verification
+          cp .config verification/build.config
+          cp "$kernel_config" verification/kernel.config
+          cp "$manifest" verification/
+          git rev-parse HEAD > verification/commit.txt
+          git log -1 --format=%P > verification/parents.txt
+          git -C feeds/onu_config rev-parse HEAD > verification/onu-feed.txt
+          git -C feeds/pon_drivers rev-parse HEAD > verification/pon-feed.txt
+          (cd "$out" && sha256sum -c sha256sums)
+      - name: Upload firmware and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xg2010g-lean-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            bin/targets/airoha/an7581/*.itb
+            bin/targets/airoha/an7581/*manifest
+            bin/targets/airoha/an7581/*.buildinfo
+            bin/targets/airoha/an7581/sha256sums
+            verification/
+            download.log
+            build.log
+            logs/

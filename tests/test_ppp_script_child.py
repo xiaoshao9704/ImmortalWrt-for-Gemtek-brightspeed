@@ -149,6 +149,19 @@ class ScriptChildTest(unittest.TestCase):
         else:
             self.assertEqual(marker.read_text(), "ip-up\n")
 
+    def test_hook_instance_names(self):
+        for filename, call in [
+            ("auth.c", 'auth_script(path_auth_down, "auth-down")'),
+            ("ipcp.c", 'ipcp_script(path_ipup, 0, "ip-up")'),
+            ("ipv6cp.c", 'ipv6cp_script(path_ipv6up, "ipv6-up")'),
+        ]:
+            source = (SOURCE / "pppd" / filename).read_text(encoding="latin-1")
+            self.assertIn(call, source)
+            wrong = {"auth.c": 'auth_script(path_auth_down, "auth-up")',
+                     "ipcp.c": 'ipcp_script(path_ipup, 0, "ip-down")',
+                     "ipv6cp.c": 'ipv6cp_script(path_ipv6up, "ipv6-ip")'}
+            self.assertNotIn(wrong[filename], source)
+
     def test_tdb_strict_exec(self):
         self.run_case()
 
